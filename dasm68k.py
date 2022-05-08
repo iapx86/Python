@@ -80,7 +80,7 @@ def am_absolute16():
     global jumplabel, label, flags
     operand = (lambda x : x & 0x7fff | -(x & 0x8000))(fetch16())
     ea = operand & 0xffffff
-    if ea < start or ea >= end:
+    if ea < start or ea > end:
         return ('(-' if operand < 0 else '(') + f'${abs(operand):0=4x})'
     if 'B' in flags:
         jumplabel[ea] = True
@@ -92,7 +92,7 @@ def am_absolute32():
     global jumplabel, label, flags
     operand = fetch16() << 16 | fetch16()
     ea = operand & 0xffffff
-    if ea < start or ea >= end:
+    if ea < start or ea > end:
         return f'(${operand:0=8x})' + ('.l' if ea < 0x8000 or ea >= 0xff8000 else '')
     if 'B' in flags:
         jumplabel[ea] = True
@@ -110,7 +110,7 @@ def am_immediate16():
     global label, flags
     operand = fetch16()
     address = operand & 0x7fff | -(operand & 0x8000) & 0xff0000
-    if 'P' in flags and address >= start and address < end:
+    if 'P' in flags and address >= start and address <= end:
         label[address] = True
         return f'#L{address:0=6x}'
     return f'#${operand:0=4x}'
@@ -119,7 +119,7 @@ def am_immediate32():
     global label, flags
     operand = fetch16() << 16 | fetch16()
     address = operand & 0xffffff
-    if 'P' in flags and address >= start and address < end:
+    if 'P' in flags and address >= start and address <= end:
         label[address] = True
         return f'#L{address:0=6x}'
     return f'#${operand:0=8x}'
@@ -315,32 +315,32 @@ for i in range(0x100):
         table[0x4400 | i] = ('', f'NEG{str_op}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
         table[0x4600 | i] = ('', f'NOT{str_op}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
     if size == 0:
-        table[0x4800 | i] = ('', f'NBCD {str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x4800 | i] = ('', f'NBCD.B {str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
     if size < 3:
         table[0x4a00 | i] = ('', f'TST{str_op}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
     if size == 3:
-        table[0x4a00 | i] = ('', f'TAS\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
-        table[0x5000 | i] = ('', f'ST\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
-        table[0x5100 | i] = ('', f'SF\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
-        table[0x5200 | i] = ('', f'SHI\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
-        table[0x5300 | i] = ('', f'SLS\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
-        table[0x5400 | i] = ('', f'SCC\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
-        table[0x5500 | i] = ('', f'SCS\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
-        table[0x5600 | i] = ('', f'SNE\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
-        table[0x5700 | i] = ('', f'SEQ\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
-        table[0x5800 | i] = ('', f'SVC\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
-        table[0x5900 | i] = ('', f'SVS\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
-        table[0x5a00 | i] = ('', f'SPL\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
-        table[0x5b00 | i] = ('', f'SMI\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
-        table[0x5c00 | i] = ('', f'SGE\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
-        table[0x5d00 | i] = ('', f'SLT\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
-        table[0x5e00 | i] = ('', f'SGT\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
-        table[0x5f00 | i] = ('', f'SLE\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x4a00 | i] = ('', f'TAS.B\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x5000 | i] = ('', f'ST.B\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x5100 | i] = ('', f'SF.B\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x5200 | i] = ('', f'SHI.B\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x5300 | i] = ('', f'SLS.B\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x5400 | i] = ('', f'SCC.B\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x5500 | i] = ('', f'SCS.B\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x5600 | i] = ('', f'SNE.B\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x5700 | i] = ('', f'SEQ.B\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x5800 | i] = ('', f'SVC.B\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x5900 | i] = ('', f'SVS.B\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x5a00 | i] = ('', f'SPL.B\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x5b00 | i] = ('', f'SMI.B\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x5c00 | i] = ('', f'SGE.B\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x5d00 | i] = ('', f'SLT.B\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x5e00 | i] = ('', f'SGT.B\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x5f00 | i] = ('', f'SLE.B\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
 
 # shift/rotate
 for i in range(0x1000):
     y = i >> 9; dr = i >> 8 & 1; size = i >> 6 & 3;  n = i & 7
-    str_dr_size = ['R.B', 'R.W', 'R.L', 'R', 'L.B', 'L.W', 'L.L', 'L'][dr * 4 + size]
+    str_dr_size = ['R.B', 'R.W', 'R.L', 'R.W', 'L.B', 'L.W', 'L.L', 'L.W'][dr * 4 + size]
     if size < 3:
         str_src = [f'#{y if y else 8}', f'D{y}'][i >> 5 & 1]
         str_op = [f'AS{str_dr_size}\t{str_src},D{n}', f'LS{str_dr_size}\t{str_src},D{n}', f'ROX{str_dr_size}\t{str_src},D{n}', f'RO{str_dr_size}\t{str_src},D{n}'][i >> 3 & 3]
@@ -416,7 +416,7 @@ for i in range(0x40):
         table[0x43c0 | i] = ('',   f'LEA.L\t{str_ea},A1', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
         table[0x45c0 | i] = ('',   f'LEA.L\t{str_ea},A2', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
         table[0x47c0 | i] = ('',   f'LEA.L\t{str_ea},A3', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
-        table[0x4840 | i] = ('',   f'PEA\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x4840 | i] = ('',   f'PEA.L\t{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
     if ea != 3 and ea < 9:
         table[0x4880 | i] = ('',   'MOVEM.W\t{},'f'{str_ea}', register_list, *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
         table[0x48c0 | i] = ('',   'MOVEM.L\t{},'f'{str_ea}', register_list, *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
@@ -440,13 +440,13 @@ for i in range(0x1000):
     str_size = ['.B', '.W', '.L', None][size]
     str_rm = [f'D{y},D{x}', f'-(A{y}),-(A{x})'][rm];
     if size == 0:
-        table[0x8000 | i] = ('', f'SBCD\t{str_rm}')
+        table[0x8000 | i] = ('', f'SBCD.B\t{str_rm}')
     if size < 3:
         table[0x9000 | i] = ('', f'SUBX{str_size}\t{str_rm}')
     if size < 3 and rm:
         table[0xb000 | i] = ('', f'CMPM{str_size}\t(A{y})+,(A{x})+')
     if size == 0:
-        table[0xc000 | i] = ('', f'ABCD\t{str_rm}')
+        table[0xc000 | i] = ('', f'ABCD.B\t{str_rm}')
     if size < 3:
         table[0xd000 | i] = ('', f'ADDX{str_size}\t{str_rm}')
 
@@ -464,7 +464,7 @@ for i in range(0x1000):
     if (i >> 3 & 0x3f) == 0x39:
         table[0x0000 | i] = ('', f'MOVEP.L\tD{x},(''{}'f',A{y})', displacement)
     if (i >> 6 & 7) == 6 and ea != 1 and ea < 12:
-        table[0x4000 | i] = ('', f'CHK\t{str_ea},D{x}', *([fnc_index[y]] if ea == 6 else [am_immediate16] if ea == 11 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x4000 | i] = ('', f'CHK.W\t{str_ea},D{x}', *([fnc_index[y]] if ea == 6 else [am_immediate16] if ea == 11 else [fnc_ea[ea]] if ea >= 5 else []))
     if (i >> 3 & 0x3f) == 0x28:
         table[0xc000 | i] = ('', f'EXG.L\tD{x},D{y}')
     if (i >> 3 & 0x3f) == 0x29:
@@ -478,7 +478,7 @@ for i in range(0x40):
         continue
     str_ea = [f'D{n}', None, f'(A{n})', f'(A{n})+', f'-(A{n})', '({},'f'A{n})', '{}', '{}', '{}', '({},PC)', '{}', '{}'][ea]
     if ea != 1 and ea < 9:
-        table[0x40c0 | i] = ('', f'MOVE\tSR,{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
+        table[0x40c0 | i] = ('', f'MOVE.W\tSR,{str_ea}', *([fnc_index[n]] if ea == 6 else [fnc_ea[ea]] if ea >= 5 else []))
     if ea != 1:
         table[0x44c0 | i] = ('', f'MOVE.B\t{str_ea},CCR', *([fnc_index[n]] if ea == 6 else [am_immediate8] if ea == 11 else [fnc_ea[ea]] if ea >= 5 else []))
         table[0x46c0 | i] = ('', f'MOVE.W\t{str_ea},SR', *([fnc_index[n]] if ea == 6 else [am_immediate16] if ea == 11 else [fnc_ea[ea]] if ea >= 5 else []))
@@ -486,7 +486,7 @@ for n in range(8):
     table[0x4840 | n] = ('', f'SWAP.W\tD{n}')
     table[0x4880 | n] = ('', f'EXT.W\tD{n}')
     table[0x48c0 | n] = ('', f'EXT.L\tD{n}')
-    table[0x4e50 | n] = ('', f'LINK\tA{n},#' +'{}', displacement)
+    table[0x4e50 | n] = ('', f'LINK.W\tA{n},#' +'{}', displacement)
     table[0x4e58 | n] = ('', f'UNLK\tA{n}')
     table[0x4e60 | n] = ('', f'MOVE.L\tA{n},USP')
     table[0x4e68 | n] = ('', f'MOVE.L\tUSP,A{n}')
@@ -551,7 +551,7 @@ if tablefile:
         words = line.split(' ')
         if words[0] == 'b':
             base = int(words[1], 16)
-            size = int(words[2]) if len(words) > 2 else 1
+            size = int(words[2], 10) if len(words) > 2 else 1
             bytestring[base:base + size] = [True] * size
         elif words[0] == 'c':
             jumplabel[int(words[1], 16)] = True
@@ -565,24 +565,35 @@ if tablefile:
             remark[addr] += [line[len(words[0] + words[1]) + 2:].rstrip()]
         elif words[0] == 's':
             base = int(words[1], 16)
-            size = int(words[2]) if len(words) > 2 else 1
+            size = int(words[2], 10) if len(words) > 2 else 1
             string[base:base + size] = [True] * size
         elif words[0] == 't':
             base = int(words[1], 16)
-            for index in range(int(words[2]) if len(words) > 2 else 1):
-                pointer[base + index * 4] = True
-                jumplabel[buffer[base + index * 4] << 24 | buffer[base + index * 2 + 1] << 16 | buffer[base + index * 4 + 2] << 8 | buffer[base + index * 2 + 3]] = True
+            size = int(words[2], 10) if len(words) > 2 else 1
+            for i in range(base, base + size * 4, 4):
+                pointer[i:i + 4] = [True] * 4
+                jumplabel[int.from_bytes(buffer[i + 1:i + 4], 'big')] = True
             noentry = False
         elif words[0] == 'u':
             base = int(words[1], 16)
-            for index in range(int(words[2]) if len(words) > 2 else 1):
-                pointer[base + index * 4] = True
-                label[buffer[base + index * 4] << 24 | buffer[base + index * 2 + 1] << 16 | buffer[base + index * 4 + 2] << 8 | buffer[base + index * 2 + 3]] = True
+            size = int(words[2], 10) if len(words) > 2 else 1
+            for i in range(base, base + size * 4, 4):
+                pointer[i:i + 4] = [True] * 4
+                label[int.from_bytes(buffer[i + 1:i + 4], 'big')] = True
 
 # path 1
-if noentry:
+if noentry and start:
     entry = start
     jumplabel[entry] = True
+elif noentry:
+    label[start] = True
+    reset = int.from_bytes(buffer[5:8], 'big')
+    entry = reset if reset >= max(start, 8) and reset < end and not reset & 1 else start
+    jumplabel[entry] = True
+    for i in range(8, min(reset, 0x400), 4):
+        vector = int.from_bytes(buffer[i + 1:i + 4], 'big')
+        if vector >= max(start, 8) and vector < end and not vector & 1:
+            jumplabel[vector] = True
 while True:
     location = end
     for i in range(start, end):
@@ -711,6 +722,10 @@ while location < end:
                 break
             print(f',${fetch():0=2x}', end='', file=file)
         print('', file=file)
+if label[location] or jumplabel[location]:
+    if listing:
+        print(f'{location:0=6X}\t\t\t\t', end='', file=file)
+    print(f'L{location:0=6x}:', file=file)
 if listing:
     print(f'{location & 0xffffff:0=6X}\t\t\t\t', end='', file=file)
 print(f'\t.end\tL{entry:0=6x}', file=file)

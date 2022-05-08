@@ -723,7 +723,7 @@ if tablefile:
         words = line.split(' ')
         if words[0] == 'b':
             base = int(words[1], 16)
-            size = int(words[2]) if len(words) > 2 else 1
+            size = int(words[2], 10) if len(words) > 2 else 1
             bytestring[base:base + size] = [True] * size
         elif words[0] == 'c':
             jumplabel[int(words[1], 16)] = True
@@ -737,24 +737,27 @@ if tablefile:
             remark[addr] += [line[len(words[0] + words[1]) + 2:].rstrip()]
         elif words[0] == 's':
             base = int(words[1], 16)
-            size = int(words[2]) if len(words) > 2 else 1
+            size = int(words[2], 10) if len(words) > 2 else 1
             string[base:base + size] = [True] * size
         elif words[0] == 't':
             base = int(words[1], 16)
-            for index in range(int(words[2]) if len(words) > 2 else 1):
-                pointer[base + index * 2] = True
-                jumplabel[buffer[base + index * 2] << 8 | buffer[base + index * 2 + 1]] = True
+            size = int(words[2], 10) if len(words) > 2 else 1
+            for i in range(base, base + size * 2, 2):
+                pointer[i:i + 2] = [True] * 2
+                jumplabel[buffer[i] << 8 | buffer[i + 1]] = True
             noentry = False
         elif words[0] == 'u':
             base = int(words[1], 16)
-            for index in range(int(words[2]) if len(words) > 2 else 1):
-                pointer[base + index * 2] = True
-                label[buffer[base + index * 2] << 8 | buffer[base + index * 2 + 1]] = True
+            size = int(words[2], 10) if len(words) > 2 else 1
+            for i in range(base, base + size * 2, 2):
+                pointer[i:i + 2] = [True] * 2
+                label[buffer[i] << 8 | buffer[i + 1]] = True
         elif words[0] == 'v':
             base = int(words[1], 16)
-            for index in range(int(words[2]) if len(words) > 2 else 1):
-                pointer[base + index * 3] = True
-                label[buffer[base + index * 3] << 8 | buffer[base + index * 3 + 1]] = True
+            size = int(words[2], 10) if len(words) > 2 else 1
+            for i in range(base, base + size * 3, 3):
+                pointer[i:i + 2] = [True] * 2
+                label[buffer[i] << 8 | buffer[i + 1]] = True
 
 # path 1
 if noentry:
