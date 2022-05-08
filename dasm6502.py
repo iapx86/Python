@@ -10,7 +10,6 @@ buffer = bytearray(0x10000)
 jumplabel = [False] * 0x10000
 label = [False] * 0x10000
 location = 0
-table = None
 opcode = 0
 flags = ''
 

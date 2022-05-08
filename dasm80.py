@@ -22,7 +22,7 @@ def fetch():
 
 def byte():
     operand = fetch()
-    return f'{operand:0={2 + (operand >= 0xa0):d}x}h'
+    return f'{operand:0={2 + (operand >= 0xa0)}x}h'
 
 def sbyte():
     operand = (lambda x : x & 0x7f | -(x & 0x80))(fetch())
@@ -1803,14 +1803,14 @@ if listing:
     print(f'\t\t\t;\tZ80 disassembler', file=file)
     print(f'\t\t\t;\tfilename: {args[0]}', file=file)
     print(f'\t\t\t;-----------------------------------------------', file=file)
-    print(f'\t\t\t\torg\t{start:0={4 + (start >= 0xa000):d}x}h', file=file)
+    print(f'\t\t\t\torg\t{start:0={4 + (start >= 0xa000)}x}h', file=file)
     print(f'\t\t\t', file=file)
 else:
     print(f';-----------------------------------------------', file=file)
     print(f';\tZ80 disassembler', file=file)
     print(f';\tfilename: {args[0]}', file=file)
     print(f';-----------------------------------------------', file=file)
-    print(f'\torg\t{start:0={4 + (start >= 0xa000):d}x}h', file=file)
+    print(f'\torg\t{start:0={4 + (start >= 0xa000)}x}h', file=file)
     print(f'', file=file)
 location = start
 while location < end:
@@ -1853,12 +1853,12 @@ while location < end:
             print(f'L{base:0=4x}:', end='', file=file)
         location = base
         c = fetch()
-        print(f'\tdb\t${c:0={2 + (c >= 0xa0):d}x}', end='', file=file)
+        print(f'\tdb\t${c:0={2 + (c >= 0xa0)}x}', end='', file=file)
         for i in range(7):
             if location >= end or not bytestring[location] or label[location]:
                 break
             c = fetch()
-            print(f',{c:0={2 + (c >= 0xa0):d}x}h', end='', file=file)
+            print(f',{c:0={2 + (c >= 0xa0)}x}h', end='', file=file)
         print('', file=file)
     elif pointer[base]:
         if listing:
@@ -1881,7 +1881,7 @@ while location < end:
                 print(f'{base:0=4X}  {c:0=2X}\t\t', end='', file=file)
             if label[base] or jumplabel[base]:
                 print(f'L{base:0=4x}:', end='', file=file)
-            print(f'\tdb\t{c:0={2 + (c >= 0xa0):d}x}h', end='', file=file)
+            print(f'\tdb\t{c:0={2 + (c >= 0xa0)}x}h', end='', file=file)
             if c >= 0x20 and c < 0x7f:
                 print(f'\t;\'{c:c}\'', end='', file=file)
             print('', file=file)

@@ -10,7 +10,6 @@ buffer = bytearray(0x10000)
 jumplabel = [False] * 0x10000
 label = [False] * 0x10000
 location = 0
-table = None
 opcode = 0
 flags = ''
 
@@ -130,35 +129,35 @@ def op_11():
 
 table_10 = {
 0x21: # LBRN
-    ('',   'LBRN\t{}',   am_lrelative),
+    ('B',  'LBRN\t{}',   am_lrelative),
 0x22: # LBHI
-    ('',   'LBHI\t{}',   am_lrelative),
+    ('B',  'LBHI\t{}',   am_lrelative),
 0x23: # LBLS
-    ('',   'LBLS\t{}',   am_lrelative),
+    ('B',  'LBLS\t{}',   am_lrelative),
 0x24: # LBHS(LBCC)
-    ('',   'LBCC\t{}',   am_lrelative),
+    ('B',  'LBCC\t{}',   am_lrelative),
 0x25: # LBLO(LBCS)
-    ('',   'LBCS\t{}',   am_lrelative),
+    ('B',  'LBCS\t{}',   am_lrelative),
 0x26: # LBNE
-    ('',   'LBNE\t{}',   am_lrelative),
+    ('B',  'LBNE\t{}',   am_lrelative),
 0x27: # LBEQ
-    ('',   'LBEQ\t{}',   am_lrelative),
+    ('B',  'LBEQ\t{}',   am_lrelative),
 0x28: # LBVC
-    ('',   'LBVC\t{}',   am_lrelative),
+    ('B',  'LBVC\t{}',   am_lrelative),
 0x29: # LBVS
-    ('',   'LBVS\t{}',   am_lrelative),
+    ('B',  'LBVS\t{}',   am_lrelative),
 0x2a: # LBPL
-    ('',   'LBPL\t{}',   am_lrelative),
+    ('B',  'LBPL\t{}',   am_lrelative),
 0x2b: # LBMI
-    ('',   'LBMI\t{}',   am_lrelative),
+    ('B',  'LBMI\t{}',   am_lrelative),
 0x2c: # LBGE
-    ('',   'LBGE\t{}',   am_lrelative),
+    ('B',  'LBGE\t{}',   am_lrelative),
 0x2d: # LBLT
-    ('',   'LBLT\t{}',   am_lrelative),
+    ('B',  'LBLT\t{}',   am_lrelative),
 0x2e: # LBGT
-    ('',   'LBGT\t{}',   am_lrelative),
+    ('B',  'LBGT\t{}',   am_lrelative),
 0x2f: # LBLE
-    ('',   'LBLE\t{}',   am_lrelative),
+    ('B',  'LBLE\t{}',   am_lrelative),
 0x3f: # SWI2
     ('',   'SWI2'),
 0x83: # CMPD #nn
