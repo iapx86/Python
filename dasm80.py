@@ -21,7 +21,7 @@ def fetch():
 
 def byte():
     operand = fetch()
-    return f'{operand:0={2 + (operand >= 0xa0)}x}h'
+    return f'{operand:0{2 + (operand >= 0xa0)}x}h'
 
 def sbyte():
     operand = (lambda x : x & 0x7f | -(x & 0x80))(fetch())
@@ -34,13 +34,13 @@ def word():
         jumplabel[operand] = True
     else:
         label[operand] = True
-    return f'L{operand:0=4x}'
+    return f'L{operand:04x}'
 
 def relative():
     global jumplabel, label, location, flags
     operand = (lambda x : x & 0x7f | -(x & 0x80))(fetch()) + location & 0xffff
     jumplabel[operand] = True
-    return f'L{operand:0=4x}'
+    return f'L{operand:04x}'
 
 table_fdcb = {}
 
@@ -475,14 +475,14 @@ if listing:
     print(f'\t\t\t;\tZ80 disassembler', file=file)
     print(f'\t\t\t;\tfilename: {args[0]}', file=file)
     print(f'\t\t\t;-----------------------------------------------', file=file)
-    print(f'\t\t\t\torg\t{start:0={4 + (start >= 0xa000)}x}h', file=file)
+    print(f'\t\t\t\torg\t{start:0{4 + (start >= 0xa000)}x}h', file=file)
     print(f'\t\t\t', file=file)
 else:
     print(f';-----------------------------------------------', file=file)
     print(f';\tZ80 disassembler', file=file)
     print(f';\tfilename: {args[0]}', file=file)
     print(f';-----------------------------------------------', file=file)
-    print(f'\torg\t{start:0={4 + (start >= 0xa000)}x}h', file=file)
+    print(f'\torg\t{start:0{4 + (start >= 0xa000)}x}h', file=file)
     print(f'', file=file)
 location = start
 while location < end:
@@ -490,7 +490,7 @@ while location < end:
     if base in remark:
         for s in remark[base]:
             if listing:
-                print(f'{base:0=4X}\t\t\t', end='', file=file)
+                print(f'{base:04X}\t\t\t', end='', file=file)
             print(f';{s}', file=file)
     if code[base]:
         s = op()
@@ -500,19 +500,19 @@ while location < end:
         size = 1
     if s != '':
         if listing:
-            print(f'{base:0=4X} ', end='', file=file)
+            print(f'{base:04X} ', end='', file=file)
             location = base
             for i in range(size):
-                print(f' {fetch():0=2X}', end='', file=file)
+                print(f' {fetch():02X}', end='', file=file)
             print('\t\t' if size < 4 else '\t', end='', file=file)
         if jumplabel[base]:
-            print(f'L{base:0=4x}:', end='', file=file)
+            print(f'L{base:04x}:', end='', file=file)
         print('\t' + s, file=file)
     elif string[base]:
         if listing:
-            print(f'{base:0=4X}\t\t\t', end='', file=file)
+            print(f'{base:04X}\t\t\t', end='', file=file)
         if label[base]:
-            print(f'L{base:0=4x}:', end='', file=file)
+            print(f'L{base:04x}:', end='', file=file)
         location = base
         print(f'\tdb\t\'{fetch():c}', end='', file=file)
         while location < end and string[location] and not label[location]:
@@ -520,29 +520,29 @@ while location < end:
         print('\'', file=file)
     elif bytestring[base]:
         if listing:
-            print(f'{base:0=4X}\t\t\t', end='', file=file)
+            print(f'{base:04X}\t\t\t', end='', file=file)
         if label[base]:
-            print(f'L{base:0=4x}:', end='', file=file)
+            print(f'L{base:04x}:', end='', file=file)
         location = base
         c = fetch()
-        print(f'\tdb\t${c:0={2 + (c >= 0xa0)}x}', end='', file=file)
+        print(f'\tdb\t${c:0{2 + (c >= 0xa0)}x}', end='', file=file)
         for i in range(7):
             if location >= end or not bytestring[location] or label[location]:
                 break
             c = fetch()
-            print(f',{c:0={2 + (c >= 0xa0)}x}h', end='', file=file)
+            print(f',{c:0{2 + (c >= 0xa0)}x}h', end='', file=file)
         print('', file=file)
     elif pointer[base]:
         if listing:
-            print(f'{base:0=4X}\t\t\t', end='', file=file)
+            print(f'{base:04X}\t\t\t', end='', file=file)
         if label[base]:
-            print(f'L{base:0=4x}:', end='', file=file)
+            print(f'L{base:04x}:', end='', file=file)
         location = base
-        print(f'\tdw\tL{fetch() | fetch() << 8:0=4x}', end='', file=file)
+        print(f'\tdw\tL{fetch() | fetch() << 8:04x}', end='', file=file)
         for i in range(3):
             if location >= end or not pointer[location] or label[location]:
                 break
-            print(f',L{fetch() | fetch() << 8:0=4x}', end='', file=file)
+            print(f',L{fetch() | fetch() << 8:04x}', end='', file=file)
         print('', file=file)
     else:
         location = base
@@ -550,13 +550,13 @@ while location < end:
             base = location
             c = fetch()
             if listing:
-                print(f'{base:0=4X}  {c:0=2X}\t\t', end='', file=file)
+                print(f'{base:04X}  {c:02X}\t\t', end='', file=file)
             if label[base] or jumplabel[base]:
-                print(f'L{base:0=4x}:', end='', file=file)
-            print(f'\tdb\t{c:0={2 + (c >= 0xa0)}x}h', end='', file=file)
+                print(f'L{base:04x}:', end='', file=file)
+            print(f'\tdb\t{c:0{2 + (c >= 0xa0)}x}h', end='', file=file)
             if c >= 0x20 and c < 0x7f:
                 print(f'\t;\'{c:c}\'', end='', file=file)
             print('', file=file)
 if listing:
-    print(f'{location & 0xffff:0=4X}\t\t\t', end='', file=file)
+    print(f'{location & 0xffff:04X}\t\t\t', end='', file=file)
 print('\tend', file=file)
