@@ -7,10 +7,9 @@ import os
 import sys
 
 buffer = bytearray(0x1000000)
-jumplabel = [False] * 0x1000000
-label = [False] * 0x1000000
+jumplabel = [False] * len(buffer)
+label = [False] * len(buffer)
 location = 0
-opcode = 0
 flags = ''
 
 def fetch():
@@ -149,8 +148,6 @@ table = {
     0x4e77: ('RTR',       'A',  'RTR'),
 }
 
-# table construction
-# move
 for i in range(0x1000):
     x = i >> 9 & 7; dst = i >> 6 & 7; src = i >> 3 & 7; y = i & 7; dst += x if dst == 7 else 0; src += y if src == 7 else 0
     if dst >= 9 or src >= 12:
@@ -163,8 +160,6 @@ for i in range(0x1000):
     table[0x3000 | i] = (f'MOVE{a}.W {src1},{dst1}', f'{flg_a}', f'MOVE{a}.W\t{src2},{dst2}', *fnc_src + fnc_dst)
     src1, src2, fnc_src = am_decode(src, y, 'L'); dst1, dst2, fnc_dst = am_decode(dst, x)
     table[0x2000 | i] = (f'MOVE{a}.L {src1},{dst1}', f'{flg_a}', f'MOVE{a}.L\t{src2},{dst2}', *fnc_src + fnc_dst)
-
-# standard
 for i in range(0x1000):
     x = i >> 9 & 7; op = i >> 6 & 7; mod = i >> 3 & 7; y = i & 7; mod += y if mod == 7 else 0
     if mod >= (12, 12, 12, 12, 9, 9, 9, 12)[op]:
@@ -185,8 +180,6 @@ for i in range(0x1000):
         s = 'S' if op == 7 else 'U'; ea1, ea2, fnc = am_decode(mod, y, 'W')
         table[0x8000 | i] = (f'DIV{s}.W {ea1},D{x}', '', f'DIV{s}.W\t{ea2},D{x}', *fnc)
         table[0xc000 | i] = (f'MUL{s}.W {ea1},D{x}', '', f'MUL{s}.W\t{ea2},D{x}', *fnc)
-
-# immediate
 for i in range(0xc0):
     mod = i >> 3 & 7; n = i & 7; mod += n if mod == 7 else 0
     if mod == 1 or mod >= 9:
@@ -208,8 +201,6 @@ for i in range(0x1000):
         continue
     n = i >> 9; data = (lambda x : x & 0x7f | -(x & 0x80))(i); data = f'${data:02x}' if data >= 0 else f'-${-data:02x}'
     table[0x7000 | i] = (f'MOVEQ.L #{data},D{n}', '', f'MOVEQ.L\t#{data},D{n}')
-
-# single operand
 for i in range(0xc0):
     mod = i >> 3 & 7; n = i & 7; mod += n if mod == 7 else 0
     if mod == 1 or mod >= 9:
@@ -227,8 +218,6 @@ for i in range(0xc0, 0x100):
     for base, op in {0x4a00:'TAS', 0x5000:'ST', 0x5100:'SF', 0x5200:'SHI', 0x5300:'SLS', 0x5400:'SCC', 0x5500:'SCS', 0x5600:'SNE', 0x5700:'SEQ',
                      0x5800:'SVC', 0x5900:'SVS', 0x5a00:'SPL', 0x5b00:'SMI', 0x5c00:'SGE', 0x5d00:'SLT', 0x5e00:'SGT', 0x5f00:f'SLE'}.items():
         table[base | i] = (f'{op}.B {ea1}', '', f'{op}.B\t{ea2}', *fnc)
-
-# shift/rotate
 for i in range(0x1000):
     y = i >> 9; dr = 'RL'[i >> 8 & 1]; size = i >> 6 & 3; n = i & 7
     if size < 3:
@@ -240,8 +229,6 @@ for i in range(0x1000):
             continue
         op = ('AS', 'LS', 'ROX', 'RO')[y]; ea1, ea2, fnc = am_decode(mod, n)
         table[0xe000 | i] = (f'{op}{dr}.W {ea1}', '', f'{op}{dr}.W\t{ea2}', *fnc)
-
-# bit manipulation
 for i in range(0x1000):
     y = i >> 9; dyn = i >> 8 & 1; mod = i >> 3 & 7; n = i & 7; mod += n if mod == 7 else 0
     if not dyn and y != 4 or mod == 1 or mod >= 9:
@@ -249,8 +236,6 @@ for i in range(0x1000):
     src1 = ('#<data>', f'D{y}')[dyn]; src2 = ('{}', f'D{y}')[dyn]
     size = 'L' if mod == 0 else 'B'; ea1, ea2, fnc = am_decode(mod, n); fnc = ([] if dyn else [am_immediate8]) + fnc; op = ('BTST', 'BCHG', 'BCLR', 'BSET')[i >> 6 & 3]
     table[0x0000 | i] = (f'{op}.{size} {src1},{ea1}', '', f'{op}.{size}\t{src2},{ea2}', *fnc)
-
-# branch
 for i in range(0x100):
     n = i & 7
     table[0x6000 | i] = ('BRA.B <label>', 'AB', 'BRA\t{}', am_relative8) if i else ('BRA.W <label>', 'AB', 'BRA{}', branch16)
@@ -261,8 +246,6 @@ for i in range(0x100):
         for base, op in {0x5000:'DBT', 0x5100:'DBRA', 0x5200:'DBHI', 0x5300:'DBLS', 0x5400:'DBCC', 0x5500:'DBCS', 0x5600:'DBNE', 0x5700:'DBEQ', 
                          0x5800:'DBVC', 0x5900:'DBVS', 0x5a00:'DBPL', 0x5b00:'DBMI', 0x5c00:'DBGE', 0x5d00:'DBLT', 0x5e00:'DBGT', 0x5f00:'DBLE'}.items():
             table[base | i] = (f'{op} D{n},<label>', 'B', f'{op}\tD{n},''{}', am_relative16)
-
-# JMP, JSR, LEA, PEA, MOVEM
 for i in range(0x40):
     mod = i >> 3; n = i & 7; mod += n if mod == 7 else 0
     if mod < 2 or mod >= 11:
@@ -280,8 +263,6 @@ for i in range(0x40):
     if mod != 4:
         table[0x4c80 | i] = (f'MOVEM.W {ea1},<register list>', '', 'MOVEM.W\t{}', movem)
         table[0x4cc0 | i] = (f'MOVEM.L {ea1},<register list>', '', 'MOVEM.L\t{}', movem)
-
-# ADDX, CMPM. SUBX, ABCD, SBCD
 for i in range(0x1000):
     x = i >> 9; size = i >> 6 & 3; rm = i >> 3 & 1; y = i & 7
     if (i & 0x130) != 0x100 or size == 3:
@@ -294,8 +275,6 @@ for i in range(0x1000):
         table[0xb000 | i] = (f'CMPM.{size} (A{y})+,(A{x})+', '', f'CMPM.{size}\t(A{y})+,(A{x})+')
     table[0x9000 | i] = (f'SUBX.{size} {rm1}', '', f'SUBX.{size}\t{rm1}')
     table[0xd000 | i] = (f'ADDX.{size} {rm1}', '', f'ADDX.{size}\t{rm1}')
-
-# miscellaneous
 for i in range(0x1000):
     x = i >> 9; mod = i >> 3 & 7; y = i & 7; mod += y if mod == 7 else 0
     if (i >> 3 & 0x3f) == 0x21:
@@ -361,12 +340,11 @@ if len(args) == 0:
     print(f'  -t <ファイル名> ラベルテーブルを使用する')
     sys.exit(0)
 remark = {}
-code = [False] * 0x1000000
-string = [False] * 0x1000000
-bytestring = [False] * 0x1000000
-pointer = [False] * 0x1000000
+code = [False] * len(buffer)
+string = [False] * len(buffer)
+bytestring = [False] * len(buffer)
+pointer = [False] * len(buffer)
 start = 0
-end = 0
 listing = False
 entry = 0
 noentry = True
@@ -378,19 +356,18 @@ for o, a in opts:
         jumplabel[entry] = True
         noentry = False
     elif o == '-f':
-        code = [True] * 0x1000000
+        code = [True] * len(buffer)
     elif o == '-l':
         listing = True
     elif o == '-o':
         file = open(a, 'w', encoding='utf-8')
     elif o == '-s':
         start = int(a, 0)
-        end = start
     elif o == '-t':
         tablefile = open(a, 'r', encoding='utf-8')
 with open(args[0], 'rb') as f:
     data = f.read()
-    end = min(start + len(data), 0x1000000)
+    end = min(start + len(data), len(buffer))
     buffer[start:end] = data
 if tablefile:
     for line in tablefile:
@@ -501,7 +478,7 @@ while location < end:
             for i in range(0, size, 2):
                 print(f' {fetch16():04X}', end='', file=file)
             print('\t\t\t' if size < 4 else '\t\t' if size < 8 else '\t', end='', file=file)
-        print('\t' + s, file=file)
+        print(f'\t{s}', file=file)
     elif string[base]:
         if label[base]:
             if listing:

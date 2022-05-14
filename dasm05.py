@@ -7,10 +7,9 @@ import os
 import sys
 
 buffer = bytearray(0x10000)
-jumplabel = [False] * 0x10000
-label = [False] * 0x10000
+jumplabel = [False] * len(buffer)
+label = [False] * len(buffer)
 location = 0
-opcode = 0
 flags = ''
 
 def fetch():
@@ -38,58 +37,39 @@ def am_relative():
     return f'L{operand:04x}'
 
 table = {
-    0x20: ('BRA',          'AB', 'BRA\t{}',         am_relative),
-    0x21: ('BRN',          'B',  'BRN\t{}',         am_relative),
-    0x22: ('BHI',          'B',  'BHI\t{}',         am_relative),
-    0x23: ('BLS',          'B',  'BLS\t{}',         am_relative),
-    0x24: ('BCC',          'B',  'BCC\t{}',         am_relative),
-    0x25: ('BLO(BCS)',     'B',  'BCS\t{}',         am_relative),
-    0x26: ('BNE',          'B',  'BNE\t{}',         am_relative),
-    0x27: ('BEQ',          'B',  'BEQ\t{}',         am_relative),
-    0x28: ('BHCC',         'B',  'BHCC\t{}',        am_relative),
-    0x29: ('BHCS',         'B',  'BHCS\t{}',        am_relative),
-    0x2a: ('BPL',          'B',  'BPL\t{}',         am_relative),
-    0x2b: ('BMI',          'B',  'BMI\t{}',         am_relative),
-    0x2c: ('BMC',          'B',  'BMC\t{}',         am_relative),
-    0x2d: ('BMS',          'B',  'BMS\t{}',         am_relative),
-    0x2e: ('BIL',          'B',  'BIL\t{}',         am_relative),
-    0x2f: ('BIH',          'B',  'BIH\t{}',         am_relative),
-    0x80: ('RTI',          'A',  'RTI'),
-    0x81: ('RTS',          'A',  'RTS'),
-    0x83: ('SWI',          '',   'SWI'),
-    0x8e: ('STOP',         '',   'STOP'),
-    0x8f: ('WAIT',         '',   'WAIT'),
-    0x97: ('TAX',          '',   'TAX'),
-    0x98: ('CLC',          '',   'CLC'),
-    0x99: ('SEC',          '',   'SEC'),
-    0x9a: ('CLI',          '',   'CLI'),
-    0x9b: ('SEI',          '',   'SEI'),
-    0x9c: ('RSP',          '',   'RSP'),
-    0x9d: ('NOP',          '',   'NOP'),
-    0x9f: ('TXA',          '',   'TXA'),
-    0xad: ('BSR',          'B',  'BSR\t{}',         am_relative),
-    0xbc: ('JMP <n',       'AB', 'JMP\t<{}',        byte),
-    0xbd: ('JSR <n',       'B',  'JSR\t<{}',        byte),
-    0xcc: ('JMP >nn',      'AB', 'JMP\t{}',         word),
-    0xcd: ('JSR >nn',      'B',  'JSR\t{}',         word),
-    0xdc: ('JMP nn,X',     'AB', 'JMP\t{},X',       word),
-    0xdd: ('JSR nn,X',     'B',  'JSR\t{},X',       word),
-    0xec: ('JMP n,X',      'AB', 'JMP\t{},X',       byte),
-    0xed: ('JSR n,X',      'B',  'JSR\t{},X',       byte),
-    0xfc: ('JMP ,X',       'AB', 'JMP\t,X'),
-    0xfd: ('JSR ,X',       'B',  'JSR\t,X'),
+    0x20: ('BRA',      'AB', 'BRA\t{}',   am_relative),
+    0x80: ('RTI',      'A',  'RTI'),
+    0x81: ('RTS',      'A',  'RTS'),
+    0x83: ('SWI',      '',   'SWI'),
+    0x8e: ('STOP',     '',   'STOP'),
+    0x8f: ('WAIT',     '',   'WAIT'),
+    0xad: ('BSR',      'B',  'BSR\t{}',   am_relative),
+    0xbc: ('JMP <n',   'AB', 'JMP\t<{}',  byte),
+    0xbd: ('JSR <n',   'B',  'JSR\t<{}',  byte),
+    0xcc: ('JMP >nn',  'AB', 'JMP\t{}',   word),
+    0xcd: ('JSR >nn',  'B',  'JSR\t{}',   word),
+    0xdc: ('JMP nn,X', 'AB', 'JMP\t{},X', word),
+    0xdd: ('JSR nn,X', 'B',  'JSR\t{},X', word),
+    0xec: ('JMP n,X',  'AB', 'JMP\t{},X', byte),
+    0xed: ('JSR n,X',  'B',  'JSR\t{},X', byte),
+    0xfc: ('JMP ,X',   'AB', 'JMP\t,X'),
+    0xfd: ('JSR ,X',   'B',  'JSR\t,X'),
 }
 
 for i, (op, b) in enumerate([(op, b) for b in range(8) for op in ('BRSET', 'BRCLR')]):
     table[0x00 | i] = (f'{op}{b}', 'B', f'{op}\t{b},''<{},{}', byte, am_relative)
 for i, (op, b) in enumerate([(op, b) for b in range(8) for op in ('BSET', 'BCLR')]):
     table[0x10 | i] = (f'{op}{b}', '', f'{op}\t{b},''<{}', byte)
+for i, op in {1:'BRN', 2:'BHI', 3:'BLS', 4:'BCC', 5:'BCS', 6:'BNE', 7:'BEQ', 8:'BHCC', 9:'BHCS', 0xa:'BPL', 0xb:'BMI', 0xc:'BMC', 0xd:'BMS', 0xe:'BIL', 0xf:'BIH'}.items():
+    table[0x20 | i] = (f'{op}', 'B', f'{op}\t''{}', am_relative)
 for i, op in {0:'NEG', 3:'COM', 4:'LSR', 6:'ROR', 7:'ASR', 8:'ASL', 9:'ROL', 0xa:'DEC', 0xc:'INC', 0xd:'TST', 0xf:'CLR'}.items():
     table[0x30 | i] = (f'{op} <n', '', f'{op}\t''<{}', byte)
     table[0x40 | i] = (f'{op}A', '', f'{op}A')
     table[0x50 | i] = (f'{op}X', '', f'{op}X')
     table[0x60 | i] = (f'{op} n,X', '', f'{op}\t''{},X', byte)
     table[0x70 | i] = (f'{op} ,X', '', f'{op}\t,X')
+for i, op in {7:'TAX', 8:'CLC', 9:'SEC', 0xa:'CLI', 0xb:'SEI', 0xc:'RSP', 0xd:'NOP', 0xf:'TXA'}.items():
+    table[0x90 | i] = (f'{op}', '', f'{op}')
 for i, op in {0:'SUB', 1:'CMP', 2:'SBC', 3:'CPX', 4:'AND', 5:'BIT', 6:'LDA', 8:'EOR', 9:'ADC', 0xa:'ORA', 0xb:'ADD', 0xe:'LDX'}.items():
     table[0xa0 | i] = (f'{op} #n', '', f'{op}\t''#{}', byte)
 for i, op in {0:'SUB', 1:'CMP', 2:'SBC', 3:'CPX', 4:'AND', 5:'BIT', 6:'LDA', 7:'STA', 8:'EOR', 9:'ADC', 0xa:'ORA', 0xb:'ADD', 0xe:'LDX', 0xf:'STX'}.items():
@@ -122,12 +102,11 @@ if len(args) == 0:
     print(f'  -t <ファイル名> ラベルテーブルを使用する')
     sys.exit(0)
 remark = {}
-code = [False] * 0x10000
-string = [False] * 0x10000
-bytestring = [False] * 0x10000
-pointer = [False] * 0x10000
+code = [False] * len(buffer)
+string = [False] * len(buffer)
+bytestring = [False] * len(buffer)
+pointer = [False] * len(buffer)
 start = 0
-end = 0
 listing = False
 noentry = True
 file = sys.stdout
@@ -137,20 +116,19 @@ for o, a in opts:
         jumplabel[int(a, 0)] = True
         noentry = False
     elif o == '-f':
-        code = [True] * 0x10000
+        code = [True] * len(buffer)
     elif o == '-l':
         listing = True
     elif o == '-o':
         file = open(a, 'w', encoding='utf-8')
     elif o == '-s':
         start = int(a, 0)
-        end = start
     elif o == '-t':
         tablefile = open(a, 'r', encoding='utf-8')
 with open(args[0], 'rb') as f:
     data = f.read()
-    end = min(start + len(data), 0x10000)
-    buffer[start:end] = data
+end = min(start + len(data), len(buffer))
+buffer[start:end] = data
 if tablefile:
     for line in tablefile:
         words = line.split(' ')
@@ -248,7 +226,7 @@ while location < end:
             print('\t\t' if size < 4 else '\t', end='', file=file)
         if jumplabel[base]:
             print(f'L{base:04x}', end='', file=file)
-        print('\t' + s, file=file)
+        print(f'\t{s}', file=file)
     elif string[base]:
         if listing:
             print(f'{base:04X}\t\t\t', end='', file=file)

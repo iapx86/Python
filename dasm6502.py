@@ -7,10 +7,9 @@ import os
 import sys
 
 buffer = bytearray(0x10000)
-jumplabel = [False] * 0x10000
-label = [False] * 0x10000
+jumplabel = [False] * len(buffer)
+label = [False] * len(buffer)
 location = 0
-opcode = 0
 flags = ''
 
 def fetch():
@@ -125,12 +124,11 @@ if len(args) == 0:
     print(f'  -t <ファイル名> ラベルテーブルを使用する')
     sys.exit(0)
 remark = {}
-code = [False] * 0x10000
-string = [False] * 0x10000
-bytestring = [False] * 0x10000
-pointer = [False] * 0x10000
+code = [False] * len(buffer)
+string = [False] * len(buffer)
+bytestring = [False] * len(buffer)
+pointer = [False] * len(buffer)
 start = 0
-end = 0
 listing = False
 noentry = True
 file = sys.stdout
@@ -140,19 +138,18 @@ for o, a in opts:
         jumplabel[int(a, 0)] = True
         noentry = False
     elif o == '-f':
-        code = [True] * 0x10000
+        code = [True] * len(buffer)
     elif o == '-l':
         listing = True
     elif o == '-o':
         file = open(a, 'w', encoding='utf-8')
     elif o == '-s':
         start = int(a, 0)
-        end = start
     elif o == '-t':
         tablefile = open(a, 'r', encoding='utf-8')
 with open(args[0], 'rb') as f:
     data = f.read()
-    end = min(start + len(data), 0x10000)
+    end = min(start + len(data), len(buffer))
     buffer[start:end] = data
 if tablefile:
     for line in tablefile:
@@ -251,7 +248,7 @@ while location < end:
             print('\t\t' if size < 4 else '\t', end='', file=file)
         if jumplabel[base]:
             print(f'L{base:04x}', end='', file=file)
-        print('\t' + s, file=file)
+        print(f'\t{s}', file=file)
     elif string[base]:
         if listing:
             print(f'{base:04X}\t\t\t', end='', file=file)
