@@ -2,6 +2,7 @@
 #   MC68000 disassembler
 #
 
+import functools
 import getopt
 import os
 import sys
@@ -11,6 +12,9 @@ jumplabel = [False] * len(buffer)
 label = [False] * len(buffer)
 location = 0
 flags = ''
+
+s8 = lambda x : x & 0x7f | -(x & 0x80)
+s16 = lambda x : x & 0x7fff | -(x & 0x8000)
 
 def fetch():
     global buffer, location
@@ -25,18 +29,18 @@ def fetch16():
     return c
 
 def displacement():
-    d = (lambda x : x & 0x7fff | -(x & 0x8000))(fetch16())
-    return f'{"-" if d < 0 else ""}${abs(d):04x}'
+    d = s16(fetch16())
+    return f'-${-d:04x}' if d < 0 else f'${d:04x}'
 
 def am_relative8():
     global jumplabel, buffer, location, flags
-    ea = location + (lambda x : x & 0x7f | -(x & 0x80))(buffer[location - 1]) & 0xffffff
+    ea = location + s8(buffer[location - 1]) & 0xffffff
     jumplabel[ea] = True
     return f'L{ea:06x}'
 
 def am_relative16():
     global jumplabel, label, location, flags
-    ea = location + (lambda x : x & 0x7fff | -(x & 0x8000))(fetch16()) & 0xffffff
+    ea = location + s16(fetch16()) & 0xffffff
     if 'B' in flags:
         jumplabel[ea] = True
     else:
@@ -48,19 +52,19 @@ def am_index(an):
     base = location; x = fetch16()
     if x & 0x700:
         return ''
-    d = x & 0x7f | -(x & 0x80)
+    d = s8(x)
     rn = f'{"da"[x >> 15]}{x >> 12 & 7}.{"wl"[x >> 11 & 1]}'
     if an == 'pc':
         d = base + d & 0xffffff; label[d] = True
         return f'(L{d:06x},pc,{rn})'
-    return f'({"-" if d < 0 else ""}${abs(d):02x},{an},{rn})' if d else f'({an},{rn})'
+    return f'(-${-d:02x},{an},{rn})' if d < 0 else f'(${d:02x},{an},{rn})' if d else f'({an},{rn})'
 
 def am_absolute16():
     global jumplabel, label, flags
-    x = (lambda x : x & 0x7fff | -(x & 0x8000))(fetch16())
+    x = s16(fetch16())
     ea = x & 0xffffff
     if ea < start or ea > end:
-        return f'({"-" if x < 0 else ""}${abs(x):04x})'
+        return f'(-${-x:04x})' if x < 0 else f'(${x:04x})'
     if 'B' in flags:
         jumplabel[ea] = True
     else:
@@ -85,7 +89,7 @@ def am_immediate8():
 def am_immediate16():
     global label, flags
     x = fetch16()
-    ea = x & 0x7fff | -(x & 0x8000) & 0xff0000
+    ea = s16(x) & 0xffffff
     if 'P' in flags and ea >= start and ea <= end:
         label[ea] = True
         return f'#L{ea:06x}'
@@ -104,7 +108,7 @@ def am_decode(mod, n, size=None):
     if mod >= 12:
         return None, None, []
     ea1 = (f'D{n}', f'A{n}', f'(A{n})', f'(A{n})+', f'-(A{n})', f'd(A{n})', f'd(A{n},Xi)', 'Abs.W', 'Abs.L', 'd(PC)', 'd(PC,Xi)', '#<data>')[mod]
-    ea2 = (f'D{n}', f'A{n}', f'(A{n})', f'(A{n})+', f'-(A{n})', '({},'f'A{n})', '{}', '{}', '{}', '({},PC)', '{}', '{}')[mod]
+    ea2 = (f'D{n}', f'A{n}', f'(A{n})', f'(A{n})+', f'-(A{n})', f'(%s,A{n})', '%s', '%s', '%s', '(%s,PC)', '%s', '%s')[mod]
     fnc_imm = {'B':am_immediate8, 'W':am_immediate16, 'L':am_immediate32}.get(size)
     fnc = {5:displacement, 6:lambda: am_index(f'a{n}'), 7:am_absolute16, 8:am_absolute32, 9:am_relative16, 10:lambda: am_index('pc'), 11:fnc_imm}.get(mod)
     return ea1, ea2, [fnc] if fnc else []
@@ -112,7 +116,7 @@ def am_decode(mod, n, size=None):
 def branch16():
     global jumplabel, location, flags
     base = location
-    d = (lambda x : x & 0x7fff | -(x & 0x8000))(fetch16())
+    d = s16(fetch16())
     ea = base + d & 0xffffff
     jumplabel[ea] = True
     return f'{".w" if -0x80 <= d < 0x80 else ""}\tL{ea:06x}'
@@ -135,13 +139,14 @@ def register_list():
 def movem():
     global buffer, location
     mod = buffer[location - 1] >> 3 & 7; n = buffer[location - 1] & 7; mod += n if mod == 7 else 0; ea1, ea2, fnc = am_decode(mod, n); regs = register_list()
-    return f'{ea2.lower().format(*[f() for f in fnc])},{regs}'
+    ea2 = functools.reduce(lambda a, b : a.replace('%s', b(), 1), fnc, ea2.lower())
+    return f'{ea2},{regs}'
 
 table = {
     0x4afc: ('ILLEGAL',   '',   'ILLEGAL'),
     0x4e70: ('RESET',     '',   'RESET'),
     0x4e71: ('NOP',       '',   'NOP'),
-    0x4e72: ('STOP #xxx', '',   'STOP\t{}', am_immediate16),
+    0x4e72: ('STOP #xxx', '',   'STOP\t%s', am_immediate16),
     0x4e73: ('RTE',       'A',  'RTE'),
     0x4e75: ('RTS',       'A',  'RTS'),
     0x4e76: ('TRAPV',     '',   'TRAPV'),
@@ -186,10 +191,10 @@ for i in range(0xc0):
         continue
     size = 'BWL'[i >> 6]; ea1, ea2, fnc = am_decode(mod, n); fnc = [{'B':am_immediate8, 'W':am_immediate16, 'L':am_immediate32}[size]] + fnc
     for base, op in {0x0000:'ORI', 0x0200:'ANDI', 0x0400:'SUBI', 0x0600:'ADDI', 0x0a00:'EORI', 0x0c00:'CMPI'}.items():
-        table[base | i] = (f'{op}.{size} #<data>,{ea1}', '', f'{op}.{size}\t''{},'f'{ea2}', *fnc)
+        table[base | i] = (f'{op}.{size} #<data>,{ea1}', '', f'{op}.{size}\t%s,{ea2}', *fnc)
 for base, op, i, ea1 in [(base, op, i, ea1) for base, op in {0x0000:'ORI', 0x0200:'ANDI', 0x0a00:'EORI'}.items() for i, ea1 in {0x3c:'CCR', 0x7c:'SR'}.items()]:
     size = 'BW'[i >> 6]; fnc = [{'B':am_immediate8, 'W':am_immediate16}[size]]
-    table[base | i] = (f'{op}.{size} #<data>,{ea1}', '', f'{op}.{size}\t''{},'f'{ea1}', *fnc)
+    table[base | i] = (f'{op}.{size} #<data>,{ea1}', '', f'{op}.{size}\t%s,{ea1}', *fnc)
 for i in range(0x1000):
     data = i >> 9 & 7; size = i >> 6 & 3; mod = i >> 3 & 7; n = i & 7; mod += n if mod == 7 else 0
     if size == 3 or mod >= 9 or size == 0 and mod == 1:
@@ -199,7 +204,7 @@ for i in range(0x1000):
 for i in range(0x1000):
     if i & 0x100:
         continue
-    n = i >> 9; data = (lambda x : x & 0x7f | -(x & 0x80))(i); data = f'${data:02x}' if data >= 0 else f'-${-data:02x}'
+    n = i >> 9; data = f'-${-s8(i):02x}' if i & 0x80 else f'${s8(i):02x}' 
     table[0x7000 | i] = (f'MOVEQ.L #{data},D{n}', '', f'MOVEQ.L\t#{data},D{n}')
 for i in range(0xc0):
     mod = i >> 3 & 7; n = i & 7; mod += n if mod == 7 else 0
@@ -216,7 +221,7 @@ for i in range(0xc0, 0x100):
         continue
     ea1, ea2, fnc = am_decode(mod, n)
     for base, op in {0x4a00:'TAS', 0x5000:'ST', 0x5100:'SF', 0x5200:'SHI', 0x5300:'SLS', 0x5400:'SCC', 0x5500:'SCS', 0x5600:'SNE', 0x5700:'SEQ',
-                     0x5800:'SVC', 0x5900:'SVS', 0x5a00:'SPL', 0x5b00:'SMI', 0x5c00:'SGE', 0x5d00:'SLT', 0x5e00:'SGT', 0x5f00:f'SLE'}.items():
+                     0x5800:'SVC', 0x5900:'SVS', 0x5a00:'SPL', 0x5b00:'SMI', 0x5c00:'SGE', 0x5d00:'SLT', 0x5e00:'SGT', 0x5f00:'SLE'}.items():
         table[base | i] = (f'{op}.B {ea1}', '', f'{op}.B\t{ea2}', *fnc)
 for i in range(0x1000):
     y = i >> 9; dr = 'RL'[i >> 8 & 1]; size = i >> 6 & 3; n = i & 7
@@ -233,19 +238,19 @@ for i in range(0x1000):
     y = i >> 9; dyn = i >> 8 & 1; mod = i >> 3 & 7; n = i & 7; mod += n if mod == 7 else 0
     if not dyn and y != 4 or mod == 1 or mod >= 9:
         continue
-    src1 = ('#<data>', f'D{y}')[dyn]; src2 = ('{}', f'D{y}')[dyn]
+    src1 = ('#<data>', f'D{y}')[dyn]; src2 = ('%s', f'D{y}')[dyn]
     size = 'L' if mod == 0 else 'B'; ea1, ea2, fnc = am_decode(mod, n); fnc = ([] if dyn else [am_immediate8]) + fnc; op = ('BTST', 'BCHG', 'BCLR', 'BSET')[i >> 6 & 3]
     table[0x0000 | i] = (f'{op}.{size} {src1},{ea1}', '', f'{op}.{size}\t{src2},{ea2}', *fnc)
 for i in range(0x100):
     n = i & 7
-    table[0x6000 | i] = ('BRA.B <label>', 'AB', 'BRA\t{}', am_relative8) if i else ('BRA.W <label>', 'AB', 'BRA{}', branch16)
+    table[0x6000 | i] = ('BRA.B <label>', 'AB', 'BRA\t%s', am_relative8) if i else ('BRA.W <label>', 'AB', 'BRA%s', branch16)
     for base, op in {0x6100:'BSR', 0x6200:'BHI', 0x6300:'BLS', 0x6400:'BCC', 0x6500:'BCS', 0x6600:'BNE', 0x6700:'BEQ', 0x6800:'BVC',
                         0x6900:'BVS', 0x6a00:'BPL', 0x6b00:'BMI', 0x6c00:'BGE', 0x6d00:'BLT', 0x6e00:'BGT', 0x6f00:'BLE'}.items():
-        table[base | i] = (f'{op}.B <label>', 'B', f'{op}\t''{}', am_relative8) if i else (f'{op}.W <label>', 'B', f'{op}''{}', branch16)
+        table[base | i] = (f'{op}.B <label>', 'B', f'{op}\t%s', am_relative8) if i else (f'{op}.W <label>', 'B', f'{op}%s', branch16)
     if (i >> 3 & 0x1f) == 0x19:
         for base, op in {0x5000:'DBT', 0x5100:'DBRA', 0x5200:'DBHI', 0x5300:'DBLS', 0x5400:'DBCC', 0x5500:'DBCS', 0x5600:'DBNE', 0x5700:'DBEQ', 
                          0x5800:'DBVC', 0x5900:'DBVS', 0x5a00:'DBPL', 0x5b00:'DBMI', 0x5c00:'DBGE', 0x5d00:'DBLT', 0x5e00:'DBGT', 0x5f00:'DBLE'}.items():
-            table[base | i] = (f'{op} D{n},<label>', 'B', f'{op}\tD{n},''{}', am_relative16)
+            table[base | i] = (f'{op} D{n},<label>', 'B', f'{op}\tD{n},%s', am_relative16)
 for i in range(0x40):
     mod = i >> 3; n = i & 7; mod += n if mod == 7 else 0
     if mod < 2 or mod >= 11:
@@ -254,20 +259,20 @@ for i in range(0x40):
     if mod != 3 and mod != 4:
         for y in range(8):
             table[0x41c0 | y << 9 | i] = (f'LEA.L {ea1},A{y}', '', f'LEA.L\t{ea2},A{y}', *fnc)
-        table[0x4840 | i] = (f'PEA.L {ea1}', '',   f'PEA.L\t{ea2}', *fnc)
+        table[0x4840 | i] = (f'PEA.L {ea1}', '', f'PEA.L\t{ea2}', *fnc)
         table[0x4e80 | i] = (f'JSR {ea1}', 'B', f'JSR\t{ea2}', *fnc)
         table[0x4ec0 | i] = (f'JMP {ea1}', 'AB', f'JMP\t{ea2}', *fnc)
     if mod != 3 and mod < 9:
-        table[0x4880 | i] = (f'MOVEM.W <register list>,{ea1}', '', 'MOVEM.W\t{},'f'{ea2}', register_list, *fnc)
-        table[0x48c0 | i] = (f'MOVEM.L <register list>,{ea1}', '', 'MOVEM.L\t{},'f'{ea2}', register_list, *fnc)
+        table[0x4880 | i] = (f'MOVEM.W <register list>,{ea1}', '', f'MOVEM.W\t%s,{ea2}', register_list, *fnc)
+        table[0x48c0 | i] = (f'MOVEM.L <register list>,{ea1}', '', f'MOVEM.L\t%s,{ea2}', register_list, *fnc)
     if mod != 4:
-        table[0x4c80 | i] = (f'MOVEM.W {ea1},<register list>', '', 'MOVEM.W\t{}', movem)
-        table[0x4cc0 | i] = (f'MOVEM.L {ea1},<register list>', '', 'MOVEM.L\t{}', movem)
+        table[0x4c80 | i] = (f'MOVEM.W {ea1},<register list>', '', 'MOVEM.W\t%s', movem)
+        table[0x4cc0 | i] = (f'MOVEM.L {ea1},<register list>', '', 'MOVEM.L\t%s', movem)
 for i in range(0x1000):
     x = i >> 9; size = i >> 6 & 3; rm = i >> 3 & 1; y = i & 7
     if (i & 0x130) != 0x100 or size == 3:
         continue
-    size = 'BWL'[size]; rm1 = (f'D{y},D{x}', f'-(A{y}),-(A{x})')[rm];
+    size = 'BWL'[size]; rm1 = (f'D{y},D{x}', f'-(A{y}),-(A{x})')[rm]
     if size == 'B':
         table[0x8000 | i] = (f'SBCD.B {rm1}', '', f'SBCD.B\t{rm1}')
         table[0xc000 | i] = (f'ABCD.B {rm1}', '', f'ABCD.B\t{rm1}')
@@ -278,13 +283,13 @@ for i in range(0x1000):
 for i in range(0x1000):
     x = i >> 9; mod = i >> 3 & 7; y = i & 7; mod += y if mod == 7 else 0
     if (i >> 3 & 0x3f) == 0x21:
-        table[0x0000 | i] = (f'MOVEP.W d(A{y}),D{x}', '', 'MOVEP.W\t({},'f'A{y}),D{x}', displacement)
+        table[0x0000 | i] = (f'MOVEP.W d(A{y}),D{x}', '', f'MOVEP.W\t(%s,A{y}),D{x}', displacement)
     if (i >> 3 & 0x3f) == 0x29:
-        table[0x0000 | i] = (f'MOVEP.L d(A{y}),D{x}', '', 'MOVEP.L\t({},'f'A{y}),D{x}', displacement)
+        table[0x0000 | i] = (f'MOVEP.L d(A{y}),D{x}', '', f'MOVEP.L\t(%s,A{y}),D{x}', displacement)
     if (i >> 3 & 0x3f) == 0x31:
-        table[0x0000 | i] = (f'MOVEP.W D{x},d(A{y})', '', f'MOVEP.W\tD{x},(''{},'f'A{y})', displacement)
+        table[0x0000 | i] = (f'MOVEP.W D{x},d(A{y})', '', f'MOVEP.W\tD{x},(%s,A{y})', displacement)
     if (i >> 3 & 0x3f) == 0x39:
-        table[0x0000 | i] = (f'MOVEP.L D{x},d(A{y})', '', f'MOVEP.L\tD{x},(''{},'f'A{y})', displacement)
+        table[0x0000 | i] = (f'MOVEP.L D{x},d(A{y})', '', f'MOVEP.L\tD{x},(%s,A{y})', displacement)
     if (i >> 6 & 7) == 6 and mod != 1 and mod < 12:
         ea1, ea2, fnc = am_decode(mod, y, 'W')
         table[0x4000 | i] = (f'CHK.W {ea1},D{x}', '', f'CHK.W\t{ea2},D{x}', *fnc)
@@ -302,14 +307,13 @@ for i in range(0x40):
     if mod != 1 and mod < 9:
         table[0x40c0 | i] = (f'MOVE.W SR,{ea1}', '', f'MOVE.W\tSR,{ea2}', *fnc)
     if mod != 1:
-        table[0x46c0 | i] = (f'MOVE.W {ea1},SR', '', f'MOVE.W\t{ea2},SR', *fnc)
-    if mod != 1:
         table[0x44c0 | i] = (f'MOVE.W {ea1},CCR', '', f'MOVE.W\t{ea2},CCR', *fnc)
+        table[0x46c0 | i] = (f'MOVE.W {ea1},SR', '', f'MOVE.W\t{ea2},SR', *fnc)
 for n in range(8):
     table[0x4840 | n] = (f'SWAP.W D{n}', '', f'SWAP.W\tD{n}')
     table[0x4880 | n] = (f'EXT.W D{n}', '', f'EXT.W\tD{n}')
     table[0x48c0 | n] = (f'EXT.L D{n}', '', f'EXT.L\tD{n}')
-    table[0x4e50 | n] = (f'LINK A{n},#<displacement>', '', f'LINK.W\tA{n},' +'#{}', displacement)
+    table[0x4e50 | n] = (f'LINK A{n},#<displacement>', '', f'LINK.W\tA{n},#%s', displacement)
     table[0x4e58 | n] = (f'UNLK A{n}', '', f'UNLK\tA{n}')
     table[0x4e60 | n] = (f'MOVE.L A{n},USP', '', f'MOVE.L\tA{n},USP')
     table[0x4e68 | n] = (f'MOVE.L USP,A{n}', '', f'MOVE.L\tUSP,A{n}')
@@ -325,7 +329,7 @@ def op():
     t = table[opcode]
     flags = t[1]
     operands = [f() for f in t[3:]]
-    return t[2].lower().format(*operands) if '' not in operands else ''
+    return functools.reduce(lambda a, b : a.replace('%s', b, 1), operands, t[2].lower()) if '' not in operands else ''
 
 # main
 opts, args = getopt.getopt(sys.argv[1:], "e:flo:s:t:")
@@ -340,12 +344,10 @@ if len(args) == 0:
     print(f'  -t <ファイル名> ラベルテーブルを使用する')
     sys.exit(0)
 remark = {}
-code = [False] * len(buffer)
-string = [False] * len(buffer)
-bytestring = [False] * len(buffer)
-pointer = [False] * len(buffer)
+attrib = bytearray(len(buffer))
 start = 0
 listing = False
+force = False
 entry = 0
 noentry = True
 file = sys.stdout
@@ -356,7 +358,7 @@ for o, a in opts:
         jumplabel[entry] = True
         noentry = False
     elif o == '-f':
-        code = [True] * len(buffer)
+        force = True
     elif o == '-l':
         listing = True
     elif o == '-o':
@@ -366,8 +368,7 @@ for o, a in opts:
     elif o == '-t':
         tablefile = open(a, 'r', encoding='utf-8')
 with open(args[0], 'rb') as f:
-    data = f.read()
-    end = min(start + len(data), len(buffer))
+    data = f.read()[:len(buffer) - start]; end = start + len(data)
     buffer[start:end] = data
 if tablefile:
     for line in tablefile:
@@ -375,7 +376,7 @@ if tablefile:
         if words[0] == 'b':
             base = int(words[1], 16)
             size = int(words[2], 10) if len(words) > 2 else 1
-            bytestring[base:base + size] = [True] * size
+            attrib[base:base + size] = b'B' * size
         elif words[0] == 'c':
             jumplabel[int(words[1], 16)] = True
             noentry = False
@@ -389,19 +390,19 @@ if tablefile:
         elif words[0] == 's':
             base = int(words[1], 16)
             size = int(words[2], 10) if len(words) > 2 else 1
-            string[base:base + size] = [True] * size
+            attrib[base:base + size] = b'S' * size
         elif words[0] == 't':
             base = int(words[1], 16)
             size = int(words[2], 10) if len(words) > 2 else 1
             for i in range(base, base + size * 4, 4):
-                pointer[i:i + 4] = [True] * 4
+                attrib[i:i + 4] = b'PPPP'
                 jumplabel[int.from_bytes(buffer[i + 1:i + 4], 'big')] = True
             noentry = False
         elif words[0] == 'u':
             base = int(words[1], 16)
             size = int(words[2], 10) if len(words) > 2 else 1
             for i in range(base, base + size * 4, 4):
-                pointer[i:i + 4] = [True] * 4
+                attrib[i:i + 4] = b'PPPP'
                 label[int.from_bytes(buffer[i + 1:i + 4], 'big')] = True
 
 # path 1
@@ -418,18 +419,16 @@ elif noentry:
         if vector >= max(start, 8) and vector < end and not vector & 1:
             jumplabel[vector] = True
 while True:
-    location = end
-    for i in range(start, end):
-        if jumplabel[i] and not code[i]:
-            location = i
-            break
+    location = start
+    while location < end and (attrib[location] or not jumplabel[location]):
+        location += 1
     if location == end:
         break
     while True:
         base = location
         op()
-        code[base:location] = [True] * (location - base)
-        if 'A' in flags or location >= end or string[location] or bytestring[location] or pointer[location]:
+        attrib[base:location] = b'C' * (location - base)
+        if not force and 'A' in flags or location >= end or attrib[location]:
             break
 
 # path 2
@@ -461,13 +460,8 @@ while location < end:
             if listing:
                 print(f'{base:06X}\t\t\t', end='', file=file)
             print(f';{s}', file=file)
-    if code[base]:
-        s = op()
-        size = location - base
-    else:
-        s = ''
-        size = 0
-    if s != '':
+    if attrib[base] == b'C'[0]:
+        s = op(); size = location - base
         if jumplabel[base]:
             if listing:
                 print(f'{base:06X}\t\t\t\t', end='', file=file)
@@ -478,58 +472,50 @@ while location < end:
             for i in range(0, size, 2):
                 print(f' {fetch16():04X}', end='', file=file)
             print('\t\t\t' if size < 4 else '\t\t' if size < 8 else '\t', end='', file=file)
-        print(f'\t{s}', file=file)
-    elif string[base]:
+        if s:
+            print(f'\t{s}', file=file)
+        else:
+            location = base
+            print(f'\t.dc.b\t${fetch():02x}', end='', file=file)
+            while location < base + size:
+                print(f',${fetch():02x}', end='', file=file)
+            print('', file=file)
+    elif attrib[base] == b'S'[0]:
         if label[base]:
             if listing:
                 print(f'{base:06X}\t\t\t\t', end='', file=file)
             print(f'L{base:06x}:', file=file)
         if listing:
             print(f'{base:06X}\t\t\t\t', end='', file=file)
-        location = base
-        print(f'\tfcc\t\'{fetch():c}', end='', file=file)
-        while location < end and string[location] and not label[location]:
+        print(f'\t.dc.b\t\'{fetch():c}', end='', file=file)
+        while location < end and attrib[location] == b'S'[0] and not label[location]:
             print(f'{fetch():c}', end='', file=file)
         print('\'', file=file)
-    elif bytestring[base]:
+    elif attrib[base] == b'B'[0]:
         if label[base]:
             if listing:
                 print(f'{base:06X}\t\t\t\t', end='', file=file)
             print(f'L{base:06x}:', file=file)
         if listing:
             print(f'{base:06X}\t\t\t\t', end='', file=file)
-        location = base
         print(f'\t.dc.b\t${fetch():02x}', end='', file=file)
         for i in range(7):
-            if location >= end or not bytestring[location] or label[location]:
+            if location >= end or attrib[location] != b'B'[0] or label[location]:
                 break
             print(f',${fetch():02x}', end='', file=file)
         print('', file=file)
-    elif pointer[base]:
+    elif attrib[base] == b'P'[0]:
         if label[base]:
             if listing:
                 print(f'{base:06X}\t\t\t\t', end='', file=file)
             print(f'L{base:06x}:', file=file)
         if listing:
             print(f'{base:06X}\t\t\t\t', end='', file=file)
-        location = base
         print(f'\t.dc.l\tL{fetch16() << 16 | fetch16():06x}', end='', file=file)
         for i in range(3):
-            if location >= end or not pointer[location] or label[location]:
+            if location >= end or attrib[location] != b'P'[0] or label[location]:
                 break
             print(f',L{fetch16() << 16 | fetch16():06x}', end='', file=file)
-        print('', file=file)
-    elif code[base]:
-        if jumplabel[base]:
-            if listing:
-                print(f'{base:06X}\t\t\t\t', end='', file=file)
-            print(f'L{base:06x}:', file=file)
-        if listing:
-            print(f'{base:06X}\t\t\t\t', end='', file=file)
-        location = base
-        print(f'\t.dc.b\t${fetch():02x}', end='', file=file)
-        for i in range(size - 1):
-            print(f',${fetch():02x}', end='', file=file)
         print('', file=file)
     else:
         if label[base] or jumplabel[base]:
@@ -538,10 +524,9 @@ while location < end:
             print(f'L{base:06x}:', file=file)
         if listing:
             print(f'{base:06X}\t\t\t\t', end='', file=file)
-        location = base
         print(f'\t.dc.b\t${fetch():02x}', end='', file=file)
         for i in range(7):
-            if location >= end or code[location] or string[location] or bytestring[location] or pointer[location] or label[location] or jumplabel[base]:
+            if location >= end or attrib[location] in b'CSBP' or label[location] or jumplabel[base]:
                 break
             print(f',${fetch():02x}', end='', file=file)
         print('', file=file)
