@@ -21,12 +21,15 @@ def fetch():
     location += 1
     return c
 
+def fetch16():
+    return fetch() | fetch() << 8
+
 def byte():
     return f'${fetch():02x}'
 
 def word():
     global jumplabel, label, flags
-    operand = fetch() | fetch() << 8
+    operand = fetch16()
     if 'B' in flags:
         jumplabel[operand] = True
     else:
@@ -195,12 +198,7 @@ if tablefile:
 # path 1
 if noentry:
     jumplabel[start] = True
-while True:
-    location = start
-    while location < end and (attrib[location] or not jumplabel[location]):
-        location += 1
-    if location == end:
-        break
+while (location := next((start + i for i, (a, l) in enumerate(zip(attrib[start:end], jumplabel[start:end])) if not a and l), end)) != end:
     while True:
         base = location
         op()
@@ -234,21 +232,10 @@ while location < end:
     if attrib[base] == b'C'[0]:
         s = op(); size = location - base
         if listing:
-            print(f'{base:04X} ', end='', file=file)
-            location = base
-            for i in range(size):
-                print(f' {fetch():02X}', end='', file=file)
-            print('\t\t' if size < 4 else '\t', end='', file=file)
+            print(f'{base:04X} ' + ''.join([f' {c:02X}' for c in buffer[base:location]]) + '\t' * (26 - size * 3 >> 3), end='', file=file)
         if jumplabel[base]:
             print(f'L{base:04x}', end='', file=file)
-        if s:
-            print(f'\t{s}', file=file)
-        else:
-            location = base
-            print(f'\tfcb\t${fetch():02x}', end='', file=file)
-            while location < base + size:
-                print(f',${fetch():02x}', end='', file=file)
-            print('', file=file)
+        print(f'\t{s}' if s else '\tfcb\t' + ','.join([f'${c:02x}' for c in buffer[base:location]]), file=file)
     elif attrib[base] == b'S'[0]:
         if listing:
             print(f'{base:04X}\t\t\t', end='', file=file)
@@ -274,11 +261,11 @@ while location < end:
             print(f'{base:04X}\t\t\t', end='', file=file)
         if label[base]:
             print(f'L{base:04x}', end='', file=file)
-        print(f'\tfdb\tL{fetch() | fetch() << 8:04x}', end='', file=file)
+        print(f'\tfdb\tL{fetch16():04x}', end='', file=file)
         for i in range(3):
             if location >= end or attrib[location] != b'P'[0] or label[location]:
                 break
-            print(f',L{fetch() | fetch() << 8:04x}', end='', file=file)
+            print(f',L{fetch16():04x}', end='', file=file)
         print('', file=file)
     else:
         c = fetch()
@@ -286,10 +273,7 @@ while location < end:
             print(f'{base:04X}  {c:02X}\t\t', end='', file=file)
         if label[base] or jumplabel[base]:
             print(f'L{base:04x}', end='', file=file)
-        print(f'\tfcb\t${c:02x}', end='', file=file)
-        if c >= 0x20 and c < 0x7f:
-            print(f'\t\'{c:c}\'', end='', file=file)
-        print('', file=file)
+        print(f'\tfcb\t${c:02x}' + (f'\t\'{c:c}\'' if c >= 0x20 and c < 0x7f else ''), file=file)
 if listing:
     print(f'{location & 0xffff:04X}\t\t\t', end='', file=file)
 print('\tend', file=file)

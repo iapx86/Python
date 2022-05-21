@@ -23,10 +23,10 @@ def fetch():
     return c
 
 def fetch16():
-    global buffer, location
-    c = buffer[location] << 8 | buffer[location + 1]
-    location += 2
-    return c
+    return fetch() << 8 | fetch()
+
+def fetch32():
+    return fetch16() << 16 | fetch16()
 
 def displacement():
     d = s16(fetch16())
@@ -73,7 +73,7 @@ def am_absolute16():
 
 def am_absolute32():
     global jumplabel, label, flags
-    x = fetch16() << 16 | fetch16()
+    x = fetch32()
     ea = x & 0xffffff
     if ea < start or ea > end:
         return f'(${x:08x}){"" if 0x8000 <= ea < 0xff8000 else ".l"}'
@@ -406,10 +406,7 @@ if tablefile:
                 label[int.from_bytes(buffer[i + 1:i + 4], 'big')] = True
 
 # path 1
-if noentry and start:
-    entry = start
-    jumplabel[entry] = True
-elif noentry:
+if noentry and start == 0:
     label[start] = True
     reset = int.from_bytes(buffer[5:8], 'big')
     entry = reset if reset >= max(start, 8) and reset < end and not reset & 1 else start
@@ -418,12 +415,10 @@ elif noentry:
         vector = int.from_bytes(buffer[i + 1:i + 4], 'big')
         if vector >= max(start, 8) and vector < end and not vector & 1:
             jumplabel[vector] = True
-while True:
-    location = start
-    while location < end and (attrib[location] or not jumplabel[location]):
-        location += 1
-    if location == end:
-        break
+elif noentry:
+    entry = start
+    jumplabel[entry] = True
+while (location := next((start + i * 2 for i, (a, l) in enumerate(zip(attrib[start:end:2], jumplabel[start:end:2])) if not a and l), end)) != end:
     while True:
         base = location
         op()
@@ -467,19 +462,8 @@ while location < end:
                 print(f'{base:06X}\t\t\t\t', end='', file=file)
             print(f'L{base:06x}:', file=file)
         if listing:
-            print(f'{base:06X}', end='', file=file)
-            location = base
-            for i in range(0, size, 2):
-                print(f' {fetch16():04X}', end='', file=file)
-            print('\t\t\t' if size < 4 else '\t\t' if size < 8 else '\t', end='', file=file)
-        if s:
-            print(f'\t{s}', file=file)
-        else:
-            location = base
-            print(f'\t.dc.b\t${fetch():02x}', end='', file=file)
-            while location < base + size:
-                print(f',${fetch():02x}', end='', file=file)
-            print('', file=file)
+            print(f'{base:06X}' + ''.join([' ' * (~i & 1) + f'{c:02X}' for i, c in enumerate(buffer[base:location])]) + '\t' * (33 - size // 2 * 5 >> 3), end='', file=file)
+        print(f'\t{s}' if s else '\t.dc.b\t' + ','.join([f'${c:02x}' for c in buffer[base:location]]), file=file)
     elif attrib[base] == b'S'[0]:
         if label[base]:
             if listing:
@@ -511,11 +495,11 @@ while location < end:
             print(f'L{base:06x}:', file=file)
         if listing:
             print(f'{base:06X}\t\t\t\t', end='', file=file)
-        print(f'\t.dc.l\tL{fetch16() << 16 | fetch16():06x}', end='', file=file)
+        print(f'\t.dc.l\tL{fetch32():06x}', end='', file=file)
         for i in range(3):
             if location >= end or attrib[location] != b'P'[0] or label[location]:
                 break
-            print(f',L{fetch16() << 16 | fetch16():06x}', end='', file=file)
+            print(f',L{fetch32():06x}', end='', file=file)
         print('', file=file)
     else:
         if label[base] or jumplabel[base]:
