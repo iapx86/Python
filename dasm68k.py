@@ -97,7 +97,7 @@ def am_immediate16():
 
 def am_immediate32():
     global label, flags
-    x = fetch16() << 16 | fetch16()
+    x = fetch32()
     ea = x & 0xffffff
     if 'P' in flags and ea >= start and ea <= end:
         label[ea] = True
@@ -471,10 +471,8 @@ while location < end:
             print(f'L{base:06x}:', file=file)
         if listing:
             print(f'{base:06X}\t\t\t\t', end='', file=file)
-        print(f'\t.dc.b\t\'{fetch():c}', end='', file=file)
-        while location < end and attrib[location] == b'S'[0] and not label[location]:
-            print(f'{fetch():c}', end='', file=file)
-        print('\'', file=file)
+        location = next((base + 1 + i for i, (a, l) in enumerate(zip(attrib[base + 1:end], label[base + 1:end])) if a != b'S'[0] or l), end)
+        print(f'\t.dc.b\t\'{buffer[base:location].decode()}\'', file=file)
     elif attrib[base] == b'B'[0]:
         if label[base]:
             if listing:
@@ -482,12 +480,9 @@ while location < end:
             print(f'L{base:06x}:', file=file)
         if listing:
             print(f'{base:06X}\t\t\t\t', end='', file=file)
-        print(f'\t.dc.b\t${fetch():02x}', end='', file=file)
-        for i in range(7):
-            if location >= end or attrib[location] != b'B'[0] or label[location]:
-                break
-            print(f',${fetch():02x}', end='', file=file)
-        print('', file=file)
+        limit = min(base + 8, end)
+        location = next((base + 1 + i for i, (a, l) in enumerate(zip(attrib[base + 1:limit], label[base + 1:limit])) if a != b'B'[0] or l), limit)
+        print(f'\t.dc.b\t' + ','.join([f'${c:02x}' for c in buffer[base:location]]), file=file)
     elif attrib[base] == b'P'[0]:
         if label[base]:
             if listing:
@@ -495,25 +490,19 @@ while location < end:
             print(f'L{base:06x}:', file=file)
         if listing:
             print(f'{base:06X}\t\t\t\t', end='', file=file)
-        print(f'\t.dc.l\tL{fetch32():06x}', end='', file=file)
-        for i in range(3):
-            if location >= end or attrib[location] != b'P'[0] or label[location]:
-                break
-            print(f',L{fetch32():06x}', end='', file=file)
-        print('', file=file)
+        limit = min(base + 16, end)
+        location = next((base + 4 + i * 4 for i, (a, l) in enumerate(zip(attrib[base + 4:limit:4], label[base + 4:limit:4])) if a != b'P'[0] or l), limit)
+        print(f'\t.dc.l\t' + ','.join([f'L{buffer[i + 1]:02x}{buffer[i + 2]:02x}{buffer[i + 3]:02x}' for i in range(base, location, 4)]), file=file)
     else:
-        if label[base] or jumplabel[base]:
+        if label[base]:
             if listing:
                 print(f'{base:06X}\t\t\t\t', end='', file=file)
             print(f'L{base:06x}:', file=file)
         if listing:
             print(f'{base:06X}\t\t\t\t', end='', file=file)
-        print(f'\t.dc.b\t${fetch():02x}', end='', file=file)
-        for i in range(7):
-            if location >= end or attrib[location] in b'CSBP' or label[location] or jumplabel[base]:
-                break
-            print(f',${fetch():02x}', end='', file=file)
-        print('', file=file)
+        limit = min(base + 8, end)
+        location = next((base + 1 + i for i, (a, l) in enumerate(zip(attrib[base + 1:limit], label[base + 1:limit])) if a or l), limit)
+        print(f'\t.dc.b\t' + ','.join([f'${c:02x}' for c in buffer[base:location]]), file=file)
 if label[location] or jumplabel[location]:
     if listing:
         print(f'{location:06X}\t\t\t\t', end='', file=file)

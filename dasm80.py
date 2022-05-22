@@ -21,9 +21,6 @@ def fetch():
     location += 1
     return c
 
-def fetch16():
-    return fetch() | fetch() << 8
-
 def byte():
     operand = fetch()
     return f'{operand:0{2 + (operand >= 0xa0)}x}h'
@@ -34,7 +31,7 @@ def sbyte():
 
 def word():
     global jumplabel, label, flags
-    operand = fetch16()
+    operand = fetch() | fetch() << 8
     if 'B' in flags:
         jumplabel[operand] = True
     else:
@@ -497,39 +494,29 @@ while location < end:
             print(f'{base:04X}\t\t\t', end='', file=file)
         if label[base]:
             print(f'L{base:04x}:', end='', file=file)
-        print(f'\tdb\t\'{fetch():c}', end='', file=file)
-        while location < end and attrib[location] == b'S'[0] and not label[location]:
-            print(f'{fetch():c}', end='', file=file)
-        print('\'', file=file)
+        location = next((base + 1 + i for i, (a, l) in enumerate(zip(attrib[base + 1:end], label[base + 1:end])) if a != b'S'[0] or l), end)
+        print(f'\tdb\t\'{buffer[base:location].decode()}\'', file=file)
     elif attrib[base] == b'B'[0]:
         if listing:
             print(f'{base:04X}\t\t\t', end='', file=file)
         if label[base]:
             print(f'L{base:04x}:', end='', file=file)
-        c = fetch()
-        print(f'\tdb\t${c:0{2 + (c >= 0xa0)}x}', end='', file=file)
-        for i in range(7):
-            if location >= end or attrib[location] != b'B'[0] or label[location]:
-                break
-            c = fetch()
-            print(f',{c:0{2 + (c >= 0xa0)}x}h', end='', file=file)
-        print('', file=file)
+        limit = min(base + 8, end)
+        location = next((base + 1 + i for i, (a, l) in enumerate(zip(attrib[base + 1:limit], label[base + 1:limit])) if a != b'B'[0] or l), limit)
+        print(f'\tdb\t' + ','.join([f'{c:0{2 + (c >= 0xa0)}x}h' for c in buffer[base:location]]), file=file)
     elif attrib[base] == b'P'[0]:
         if listing:
             print(f'{base:04X}\t\t\t', end='', file=file)
         if label[base]:
             print(f'L{base:04x}:', end='', file=file)
-        print(f'\tdw\tL{fetch16():04x}', end='', file=file)
-        for i in range(3):
-            if location >= end or attrib[location] != b'P'[0] or label[location]:
-                break
-            print(f',L{fetch16():04x}', end='', file=file)
-        print('', file=file)
+        limit = min(base + 8, end)
+        location = next((base + 2 + i * 2 for i, (a, l) in enumerate(zip(attrib[base + 2:limit:2], label[base + 2:limit:2])) if a != b'P'[0] or l), limit)
+        print(f'\tdw\t' + ','.join([f'L{buffer[i + 1]:02x}{buffer[i]:02x}' for i in range(base, location, 2)]), file=file)
     else:
         c = fetch()
         if listing:
             print(f'{base:04X}  {c:02X}\t\t', end='', file=file)
-        if label[base] or jumplabel[base]:
+        if label[base]:
             print(f'L{base:04x}:', end='', file=file)
         print(f'\tdb\t{c:0{2 + (c >= 0xa0)}x}h' + (f'\t;\'{c:c}\'' if c >= 0x20 and c < 0x7f else ''), file=file)
 if listing:
