@@ -13,7 +13,10 @@ label = [False] * len(buffer)
 location = 0
 flags = ''
 
-s8 = lambda x : x & 0x7f | -(x & 0x80)
+
+def s8(x):
+    return x & 0x7f | -(x & 0x80)
+
 
 def fetch():
     global buffer, location
@@ -21,13 +24,16 @@ def fetch():
     location += 1
     return c
 
+
 def byte():
     operand = fetch()
     return f'{operand:0{2 + (operand >= 0xa0)}x}h'
 
+
 def sbyte():
     operand = s8(fetch())
     return f'{operand:0=+3x}h'
+
 
 def word():
     global jumplabel, label, flags
@@ -38,11 +44,13 @@ def word():
         label[operand] = True
     return f'L{operand:04x}'
 
+
 def relative():
     global jumplabel, label, location, flags
     operand = s8(fetch()) + location & 0xffff
     jumplabel[operand] = True
     return f'L{operand:04x}'
+
 
 table_fdcb = {}
 
@@ -50,6 +58,7 @@ for i, op in {0x00:'RLC', 0x08:'RRC', 0x10:'RL', 0x18:'RR', 0x20:'SLA', 0x28:'SR
     table_fdcb[i | 6] = (f'{op} (IY+d)', '', f'{op}\t(IY%s)')
 for i, op, b, in [(i | b << 3, op, b) for i, op in {0x40:'BIT', 0x80:'RES', 0xc0:'SET'}.items() for b in range(8)]:
     table_fdcb[i | 6] = (f'{op} {b},(IY+d)', '', f'{op}\t{b},(IY%s)')
+
 
 def op_fdcb():
     global table_fdcb
@@ -59,12 +68,14 @@ def op_fdcb():
         return ''
     return table_fdcb[opcode][2].lower().replace('%s', d)
 
+
 table_ddcb = {}
 
 for i, op in {0x00:'RLC', 0x08:'RRC', 0x10:'RL', 0x18:'RR', 0x20:'SLA', 0x28:'SRA', 0x38:'SRL'}.items():
     table_ddcb[i | 6] = (f'{op} (IX+d)', '', f'{op}\t(IX%s)')
 for i, op, b, in [(i | b << 3, op, b) for i, op in {0x40:'BIT', 0x80:'RES', 0xc0:'SET'}.items() for b in range(8)]:
     table_ddcb[i | 6] = (f'{op} {b},(IX+d)', '', f'{op}\t{b},(IX%s)')
+
 
 def op_ddcb():
     global table_ddcb
@@ -73,6 +84,7 @@ def op_ddcb():
     if opcode not in table_ddcb:
         return ''
     return table_ddcb[opcode][2].lower().replace('%s', d)
+
 
 table_fd = {
     0x09: ('ADD IY,BC',    '',   'ADD\tIY,BC'),
@@ -134,6 +146,7 @@ for i, r in {0:'B', 1:'C', 2:'D', 3:'E', 7:'A'}.items():
     table_fd[0x60 | i] = (f'LD IYH,{r}', '', f'LD\tIYH,{r}') # undefined operation
     table_fd[0x68 | i] = (f'LD IYL,{r}', '', f'LD\tIYL,{r}') # undefined operation
 
+
 def op_fd():
     global flags, table_fd
     opcode = fetch()
@@ -142,6 +155,7 @@ def op_fd():
     t = table_fd[opcode]
     flags = t[1]
     return functools.reduce(lambda a, b : a.replace('%s', b(), 1), t[3:], t[2].lower())
+
 
 table_ed = {
     0x44: ('NEG',    '',   'NEG'),
@@ -184,6 +198,7 @@ for i, rr in {0:'BC', 1:'DE', 3:'SP'}.items():
     table_ed[0x43 | i << 4] = (f'LD (nn),{rr}', '', f'LD\t(%s),{rr}', word)
     table_ed[0x4b | i << 4] = (f'LD {rr},(nn)', '', f'LD\t{rr},(%s)', word)
 
+
 def op_ed():
     global flags, table_ed
     opcode = fetch()
@@ -192,6 +207,7 @@ def op_ed():
     t = table_ed[opcode]
     flags = t[1]
     return functools.reduce(lambda a, b : a.replace('%s', b(), 1), t[3:], t[2].lower())
+
 
 table_dd = {
     0x09: ('ADD IX,BC',    '',   'ADD\tIX,BC'),
@@ -253,6 +269,7 @@ for i, r in {0:'B', 1:'C', 2:'D', 3:'E', 7:'A'}.items():
     table_dd[0x60 | i] = (f'LD IXH,{r}', '', f'LD\tIXH,{r}') # undefined operation
     table_dd[0x68 | i] = (f'LD IXL,{r}', '', f'LD\tIXL,{r}') # undefined operation
 
+
 def op_dd():
     global flags, table_dd
     opcode = fetch()
@@ -261,6 +278,7 @@ def op_dd():
     t = table_dd[opcode]
     flags = t[1]
     return functools.reduce(lambda a, b : a.replace('%s', b(), 1), t[3:], t[2].lower())
+
 
 table_cb = {}
 
@@ -271,12 +289,14 @@ for i, op, b, in [(i | b << 3, op, b) for i, op in {0x40:'BIT', 0x80:'RES', 0xc0
     for j, r in enumerate(('B', 'C', 'D', 'E', 'H', 'L', '(HL)', 'A')):
         table_cb[i | j] = (f'{op} {b},{r}', '', f'{op}\t{b},{r}')
 
+
 def op_cb():
     global table_cb
     opcode = fetch()
     if opcode not in table_cb:
         return ''
     return table_cb[opcode][2].lower()
+
 
 table = {
     0x00: ('NOP',        '',   'NOP'),
@@ -360,6 +380,7 @@ for i, qq in enumerate(('BC', 'DE', 'HL', 'AF')):
 for p in range(0, 0x40, 8):
     table[0xc7 | p] = (f'RST {p:02x}h', '', f'RST\t{p:02x}h')
 
+
 def op():
     global flags, table
     opcode = fetch()
@@ -369,6 +390,7 @@ def op():
     t = table[opcode]
     flags = t[1]
     return functools.reduce(lambda a, b : a.replace('%s', b(), 1), t[3:], t[2].lower())
+
 
 # main
 opts, args = getopt.getopt(sys.argv[1:], "e:flo:s:t:")

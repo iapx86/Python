@@ -13,7 +13,10 @@ label = [False] * len(buffer)
 location = 0
 flags = ''
 
-s8 = lambda x : x & 0x7f | -(x & 0x80)
+
+def s8(x):
+    return x & 0x7f | -(x & 0x80)
+
 
 def fetch():
     global buffer, location
@@ -21,8 +24,10 @@ def fetch():
     location += 1
     return c
 
+
 def byte():
     return f'${fetch():02x}'
+
 
 def word():
     global jumplabel, label, flags
@@ -33,11 +38,13 @@ def word():
         label[operand] = True
     return f'L{operand:04x}'
 
+
 def am_relative():
     global jumplabel, label, location, flags
     operand = s8(fetch()) + location & 0xffff
     jumplabel[operand] = True
     return f'L{operand:04x}'
+
 
 table = {
     0x18: ('XGDX',    '',   'XGDX'), # (HD63701)
@@ -86,6 +93,7 @@ for i, op in enumerate(('SUBB', 'CMPB', 'SBCB', 'ADDD', 'ANDB', 'BITB', 'LDAB', 
     table[0xe0 | i] = (f'{op} ,X', '', f'{op}\t%s,X', byte)
     table[0xf0 | i] = (f'{op} >nn', '', f'{op}\t%s', word)
 
+
 def op():
     global flags, table
     opcode = fetch()
@@ -95,6 +103,7 @@ def op():
     t = table[opcode]
     flags = t[1]
     return functools.reduce(lambda a, b : a.replace('%s', b(), 1), t[3:], t[2].lower())
+
 
 # main
 opts, args = getopt.getopt(sys.argv[1:], "e:flo:s:t:")

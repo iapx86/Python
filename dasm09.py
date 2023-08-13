@@ -13,8 +13,14 @@ label = [False] * len(buffer)
 location = 0
 flags = ''
 
-s5 = lambda x : x & 15 | -(x & 16)
-s8 = lambda x : x & 0x7f | -(x & 0x80)
+
+def s5(x):
+    return x & 15 | -(x & 16)
+
+
+def s8(x):
+    return x & 0x7f | -(x & 0x80)
+
 
 def fetch():
     global buffer, location
@@ -22,11 +28,14 @@ def fetch():
     location += 1
     return c
 
+
 def fetch16():
     return fetch() << 8 | fetch()
 
+
 def byte():
     return f'${fetch():02x}'
+
 
 def word():
     global jumplabel, label, flags
@@ -37,6 +46,7 @@ def word():
         label[operand] = True
     return f'L{operand:04x}'
 
+
 def am_relative():
     global jumplabel, label, location, flags
     operand = s8(fetch()) + location & 0xffff
@@ -46,6 +56,7 @@ def am_relative():
         label[operand] = True
     return f'L{operand:04x}'
 
+
 def am_lrelative():
     global jumplabel, label, location, flags
     operand = fetch16() + location & 0xffff
@@ -54,6 +65,7 @@ def am_lrelative():
     else:
         label[operand] = True
     return f'L{operand:04x}'
+
 
 def am_index():
     post = fetch(); pl = post & 15
@@ -82,15 +94,18 @@ def am_index():
     inc = ('+', '++')[post & 1] if (post & 0x8e) == 0x80 else ''
     return f'{offset},{dec}{reg}{inc}' if not post & 0x80 or not post & 0x10 else f'[{offset},{dec}{reg}{inc}]' if pl != 0x0f else f'[{offset}]'
 
+
 def exg_tfr():
     post = fetch()
     regs = {0:'d', 1:'x', 2:'y', 3:'u', 4:'s', 5:'pc', 8:'a', 9:'b', 0xa:'cc', 0xb:'dp'}
     return f'{regs[post >> 4]},{regs[post & 15]}' if post >> 4 in regs and post & 15 in regs else ''
 
+
 def psh_pul():
     global buffer, location
     post = fetch(); regs = ('cc', 'a', 'b', 'dp', 'x', 'y', 's' if buffer[location - 2] & 2 else 'u', 'pc')
     return ','.join([reg for i, reg in enumerate(regs) if post & 1 << i])
+
 
 table_11 = {
     0x3f: ('SWI3', '',   'SWI3'),
@@ -102,6 +117,7 @@ for i, op in {3:'CMPU', 0xc:'CMPS'}.items():
     table_11[0xa0 | i] = (f'{op} ,r', '', f'{op}\t%s', am_index)
     table_11[0xb0 | i] = (f'{op} >nn', '', f'{op}\t%s', word)
 
+
 def op_11():
     global flags, table_11
     opcode = fetch()
@@ -111,6 +127,7 @@ def op_11():
     flags = t[1]
     operands = [f() for f in t[3:]]
     return functools.reduce(lambda a, b : a.replace('%s', b, 1), operands, t[2].lower()) if '' not in operands else ''
+
 
 table_10 = {
     0x3f: ('SWI2',    '',   'SWI2'),
@@ -130,6 +147,7 @@ for i, op in {0xe:'LDS', 0xf:'STS'}.items():
     table_10[0xe0 | i] = (f'{op} ,r', '', f'{op}\t%s', am_index)
     table_10[0xf0 | i] = (f'{op} >nn', '', f'{op}\t%s', word)
 
+
 def op_10():
     global flags, table_10
     opcode = fetch()
@@ -139,6 +157,7 @@ def op_10():
     flags = t[1]
     operands = [f() for f in t[3:]]
     return functools.reduce(lambda a, b : a.replace('%s', b, 1), operands, t[2].lower()) if '' not in operands else ''
+
 
 table = {
     0x0e: ('JMP <n',  'A',  'JMP\t%s',    byte),
@@ -198,6 +217,7 @@ for i, op in enumerate(('SUBB', 'CMPB', 'SBCB', 'ADDD', 'ANDB', 'BITB', 'LDB', '
     table[0xe0 | i] = (f'{op} ,r', '', f'{op}\t%s', am_index)
     table[0xf0 | i] = (f'{op} >nn', '', f'{op}\t%s', word)
 
+
 def op():
     global flags, table
     opcode = fetch()
@@ -208,6 +228,7 @@ def op():
     flags = t[1]
     operands = [f() for f in t[3:]]
     return functools.reduce(lambda a, b : a.replace('%s', b, 1), operands, t[2].lower()) if '' not in operands else ''
+
 
 # main
 opts, args = getopt.getopt(sys.argv[1:], "e:flo:s:t:")

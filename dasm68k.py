@@ -13,8 +13,14 @@ label = [False] * len(buffer)
 location = 0
 flags = ''
 
-s8 = lambda x : x & 0x7f | -(x & 0x80)
-s16 = lambda x : x & 0x7fff | -(x & 0x8000)
+
+def s8(x):
+    return x & 0x7f | -(x & 0x80)
+
+
+def s16(x):
+    return x & 0x7fff | -(x & 0x8000)
+
 
 def fetch():
     global buffer, location
@@ -22,21 +28,26 @@ def fetch():
     location += 1
     return c
 
+
 def fetch16():
     return fetch() << 8 | fetch()
+
 
 def fetch32():
     return fetch16() << 16 | fetch16()
 
+
 def displacement():
     d = s16(fetch16())
     return f'-${-d:04x}' if d < 0 else f'${d:04x}'
+
 
 def am_relative8():
     global jumplabel, buffer, location, flags
     ea = location + s8(buffer[location - 1]) & 0xffffff
     jumplabel[ea] = True
     return f'L{ea:06x}'
+
 
 def am_relative16():
     global jumplabel, label, location, flags
@@ -46,6 +57,7 @@ def am_relative16():
     else:
         label[ea] = True
     return f'L{ea:06x}'
+
 
 def am_index(an):
     global label
@@ -59,6 +71,7 @@ def am_index(an):
         return f'(L{d:06x},pc,{rn})'
     return f'(-${-d:02x},{an},{rn})' if d < 0 else f'(${d:02x},{an},{rn})' if d else f'({an},{rn})'
 
+
 def am_absolute16():
     global jumplabel, label, flags
     x = s16(fetch16())
@@ -70,6 +83,7 @@ def am_absolute16():
     else:
         label[ea] = True
     return f'(L{ea:06x}).w'
+
 
 def am_absolute32():
     global jumplabel, label, flags
@@ -83,8 +97,10 @@ def am_absolute32():
         label[ea] = True
     return f'(L{ea:06x})'
 
+
 def am_immediate8():
     return f'#${fetch16() & 0xff:02x}'
+
 
 def am_immediate16():
     global label, flags
@@ -95,6 +111,7 @@ def am_immediate16():
         return f'#L{ea:06x}'
     return f'#${x:04x}'
 
+
 def am_immediate32():
     global label, flags
     x = fetch32()
@@ -103,6 +120,7 @@ def am_immediate32():
         label[ea] = True
         return f'#L{ea:06x}'
     return f'#${x:08x}'
+
 
 def am_decode(mod, n, size=None):
     if mod >= 12:
@@ -113,6 +131,7 @@ def am_decode(mod, n, size=None):
     fnc = {5:displacement, 6:lambda: am_index(f'a{n}'), 7:am_absolute16, 8:am_absolute32, 9:am_relative16, 10:lambda: am_index('pc'), 11:fnc_imm}.get(mod)
     return ea1, ea2, [fnc] if fnc else []
 
+
 def branch16():
     global jumplabel, location, flags
     base = location
@@ -120,6 +139,7 @@ def branch16():
     ea = base + d & 0xffffff
     jumplabel[ea] = True
     return f'{".w" if -0x80 <= d < 0x80 else ""}\tL{ea:06x}'
+
 
 def register_list():
     global buffer, location
@@ -136,11 +156,13 @@ def register_list():
             prev = c
     return '/'.join(regs)
 
+
 def movem():
     global buffer, location
     mod = buffer[location - 1] >> 3 & 7; n = buffer[location - 1] & 7; mod += n if mod == 7 else 0; ea1, ea2, fnc = am_decode(mod, n); regs = register_list()
     ea2 = functools.reduce(lambda a, b : a.replace('%s', b(), 1), fnc, ea2.lower())
     return f'{ea2},{regs}'
+
 
 table = {
     0x4afc: ('ILLEGAL',   '',   'ILLEGAL'),
@@ -320,6 +342,7 @@ for n in range(8):
 for v in range(16):
     table[0x4e40 | v] = (f'TRAP #{v}', '', f'TRAP\t#{v}')
 
+
 def op():
     global flags, table
     opcode = fetch16()
@@ -330,6 +353,7 @@ def op():
     flags = t[1]
     operands = [f() for f in t[3:]]
     return functools.reduce(lambda a, b : a.replace('%s', b, 1), operands, t[2].lower()) if '' not in operands else ''
+
 
 # main
 opts, args = getopt.getopt(sys.argv[1:], "e:flo:s:t:")
